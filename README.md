@@ -1,8 +1,8 @@
 # Brainstorm
 
-Created by: ilyas Baktache
+Created by: Ilyas B
 Created time: 9 mai 2023 20:12
-Last edited by: ilyas Baktache
+Last edited by: Ilyas B
 Last edited time: 10 mai 2023 18:47
 
 ## Objectif
