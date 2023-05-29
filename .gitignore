@@ -1,0 +1,7 @@
+# Cache file
+.ipynb_checkpoints
+__pycache__/
+.Ds_Store
+
+# ENV
+env/
