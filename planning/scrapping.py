@@ -1,3 +1,15 @@
+'''
+Ce code permet de récupérer les données du planning de Planifico.
+Les données sont enregistrées dans un fichier CSV.
+
+Pour exécuter ce code, il faut installer les librairies suivantes :
+* selenium
+* bs4
+* requests
+
+Auteur : Ilyas Baktache
+'''
+
 # import des librairies
 
 
@@ -53,7 +65,7 @@ class planifico:
         '''
 
         # Nom du fichier CSV de sortie
-        nom_fichier_csv = 'data/data_planning.csv'
+        nom_fichier_csv = 'planning/data_planning.csv'
 
         # Liste des en-têtes de colonnes
         entetes = ['date', 'roles']
@@ -267,7 +279,7 @@ class planifico:
         datas[date_object] = data
         return datas
 
-    def get_data(password,path_driver =r'/Users/mac2021/Documents/Projet/Projet Dionysos/dionysos/chromedriver', username = "baktacheilyas@gmail.com",oldest_date = datetime(2023, 5, 1),time_refresh = 50,charge_time = 1):
+    def get_data(password,path_driver =r'/Users/mac2021/Documents/Projet/Projet Dionysos/dionysos/planning/chromedriver', username = "baktacheilyas@gmail.com",oldest_date = datetime(2023, 5, 1),time_refresh = 50,charge_time = 1):
         '''
         Cette fonction permet de récupérer les données de planifico
 
