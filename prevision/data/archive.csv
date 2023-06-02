@@ -1,6 +1,3 @@
-latitude,longitude,elevation,utc_offset_seconds,timezone,timezone_abbreviation
-45.600006,-73.7,163.0,-14400,America/New_York,EDT
-
 time,apparent_temperature_mean (°C),rain_sum (mm),snowfall_sum (cm)
 2023-03-03,-12.8,0.00,0.00
 2023-03-04,-9.1,0.00,7.42
