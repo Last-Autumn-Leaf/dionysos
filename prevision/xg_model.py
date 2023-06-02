@@ -1,21 +1,29 @@
 # Librairie
+
+# data manipulation
 import pandas as pd
 import matplotlib.pyplot as plt
-import xgboost as xgb
-
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import mean_absolute_error,mean_squared_error
-
 import pickle
+
+# machine learning
+import xgboost as xgb
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
+from sklearn.metrics import mean_absolute_error,mean_squared_error
+from scipy.stats import randint
+from pandas.plotting import parallel_coordinates
+
+# log
 from datetime import datetime
 import logging as lg
 lg.basicConfig(level=lg.INFO)
-'''
-Import des fichiers de données
-'''
+
+
 
 class pre_process():
+    '''
+    Cette class permet de préparer les données pour l'entrainement du modèle
+    '''
 
     def date2day(date_str):
         # On ajoute une colonne 'Jour' qui contient le jour de la semaine
@@ -29,9 +37,13 @@ class pre_process():
         jour_semaine = date_str.weekday()
         return jour_semaine
 
-    def get_data():
-        # Chemin des fichiers de données
-        big_chemin = 'prevision/data/'
+    def get_data(big_chemin = 'prevision/data/'):
+        '''
+        Cette fonction permet de charger les données d'entrainement
+            * Input :  (Str) Chemin vers le dossier contenant les données
+            * Output : (DataFrame) Données d'entrainement
+        '''
+        # Chemin vers les fichiers
         attendancePath=big_chemin + "affluence.csv"
         prevSellsPath=big_chemin + "data_vente.csv"
         meteoPath=big_chemin + "archive.csv"
@@ -120,8 +132,8 @@ class modele_xg():
 
         def compare2planifico(model,X_test,y_test,prevision_cage,plot = False):
             predictions = model.predict(X_test)
-            erreur_model = mean_absolute_error(predictions, y_test)
-            erreur_cage  = mean_absolute_error(prevision_cage, y_test)
+            erreur_model = mean_squared_error(predictions, y_test)
+            erreur_cage  = mean_squared_error(prevision_cage, y_test)
             print("Notre prevision : Mean Absolute Error : {}".format(erreur_model))
             print("Prévision cage : Mean Absolute Error : {}".format(erreur_cage))
 
@@ -137,12 +149,12 @@ class modele_xg():
             
             return erreur_model,erreur_cage
 
-        def hyperparametres(X_train, y_train, X_test, y_test):
+        def hyperparametres_grid(X_train, y_train, X_test, y_test):
             # Définir les hyperparamètres à tester
             param_grid = {
                 'n_estimators': [10,100, 200, 500, 1000],
                 'max_depth': [5,10, 15,25,50,100],
-                'learning_rate': [ 0.5, 0.1,0.075 ,0.05,0.025 ,0.01, 0.001],
+                'learning_rate': [ 0.5, 0.1, 0.075 ,0.05,0.025 ,0.01, 0.001],
                 'subsample': [0.2 , 0.4 ,0.6, 0.8, 1.0],
                 'colsample_bytree': [0.2 , 0.4 ,0.6, 0.8, 1.0],
                 'gamma': [0, 0.1, 0.5, 1.0],
@@ -172,6 +184,81 @@ class modele_xg():
             print("RMSE sur les données de test :", rmse)
             
             return grid_search.best_params_, best_model
+    
+        def hyperparametres_random(X_train, y_train, X_test, y_test,plot = False):
+            # Définir les hyperparamètres à tester
+            param_grid = {
+                            'n_estimators': [10,100, 200, 500, 1000],
+                            'max_depth': [5,10, 15,25,50,100],
+                            'learning_rate': [ 0.5, 0.1, 0.075 ,0.05,0.025 ,0.01, 0.001],
+                            'subsample': [0.2 , 0.4 ,0.6, 0.8, 1.0],
+                            'colsample_bytree': [0.2 , 0.4 ,0.6, 0.8, 1.0],
+                            'gamma': [0, 0.1, 0.5, 1.0],
+                            'min_child_weight': [1, 3, 5],
+                            'reg_alpha': [0, 0.01, 0.1, 1.0],
+                            'reg_lambda': [0, 0.01, 0.1, 1.0]
+                        }
+            # Créer le modèle XGBoost
+            model = xgb.XGBRegressor(objective='reg:squarederror')
+
+            # Effectuer la recherche aléatoire des hyperparamètres
+            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=10, scoring='neg_root_mean_squared_error', cv=5, verbose=1, random_state=42)
+            random_search.fit(X_train, y_train)
+
+            if plot : 
+                # Obtenir les résultats sous forme de DataFrame
+                results_df = pd.DataFrame(random_search.cv_results_)
+
+                # drop std_fit_time, mean_score_time,std_score_time,rank_test_score, split0_test_score, split1_test_score, split2_test_score, split3_test_score, split4_test_score
+                results_df = results_df.drop(columns=['params','std_fit_time', 'mean_score_time','std_score_time','rank_test_score', 'split0_test_score', 'split1_test_score', 'split2_test_score', 'split3_test_score', 'split4_test_score'])
+                # change le nom des colonnes avec param sans le prefixe
+                results_df.columns = results_df.columns.str.replace('param_', '')
+                results_df.columns = results_df.columns.str.replace('_', ' ')
+                # Supprimer les colonnes d'index et de paramètres
+                results_df = results_df.iloc[:, 2:]
+
+                # Ajouter les colonnes de temps et de RMSE
+                results_df['Time'] = random_search.cv_results_['mean_fit_time']
+                results_df['RMSE'] = -random_search.cv_results_['mean_test_score']
+
+                # Adapter les plages des axes pour chaque hyperparamètre
+                for col in results_df.columns[:-2]:
+                    min_value = results_df[col].min()
+                    max_value = results_df[col].max()
+                    results_df[col] = (results_df[col] - min_value) / (max_value - min_value)
+
+                # Créer le Parallel Coordinates Plot
+                plt.figure(figsize=(12, 6))
+                plt.title('Parallel Coordinates Plot - Hyperparameters vs. Time and RMSE')
+                plt.xlabel('Hyperparameter')
+                plt.ylabel('Normalized Value')
+                plt.grid(True)
+
+                # Tracer le Parallel Coordinates Plot
+                parallel_coordinates(results_df, class_column='RMSE', colormap='viridis')
+
+                plt.xticks(rotation=45)
+                plt.gca().spines['top'].set_visible(False)
+                plt.gca().spines['right'].set_visible(False)
+                # supprime la legend
+                plt.gca().legend_.remove()
+                plt.tight_layout()
+                plt.show()
+
+            # Obtenir les meilleurs hyperparamètres
+            best_params = random_search.best_params_
+            print("Meilleurs hyperparamètres :", best_params)
+
+            # Entraîner le modèle final avec les meilleurs hyperparamètres
+            best_model = xgb.XGBRegressor(**best_params)
+            best_model.fit(X_train, y_train)
+
+            # Évaluer les performances du modèle sur les données de test
+            y_pred = best_model.predict(X_test)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            print("RMSE :", rmse)
+
+            return best_params, best_model
 
 if __name__ == '__main__':
 
@@ -190,7 +277,7 @@ if __name__ == '__main__':
     erreur_model,erreur_cage = modele_xg.compare2planifico(model,X_test,y_test,prevision_cage,plot = False)
     # Hyperparamètres
     lg.info("[" + str(datetime.now().strftime("%d/%m/%Y %H:%M:%S")) + "] Recherche des meilleurs hyperparamètres")
-    best_params, best_model = modele_xg.hyperparametres(X_train, y_train, X_test, y_test)
+    best_params, best_model = modele_xg.hyperparametres_random(X_train, y_train, X_test, y_test)
     # enregistrer le modèle en pickle
-    pickle.dump(best_model, open('model.pkl', 'wb'))
+    pickle.dump(best_model, open('prevision/model.pkl', 'wb'))
     lg.info("[" + str(datetime.now().strftime("%d/%m/%Y %H:%M:%S")) + "]Meilleur modèle enregistré")
