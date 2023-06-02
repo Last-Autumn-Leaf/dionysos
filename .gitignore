@@ -5,3 +5,10 @@ __pycache__/
 
 # ENV
 env/
+
+# fichier sensible ou inutile
+avis/api_key.txt
+planning/chromedriver
+
+# Logs
+logs/
