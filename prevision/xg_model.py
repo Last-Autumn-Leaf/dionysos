@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import mean_absolute_error,mean_squared_error
 
+import pickle
 from datetime import datetime
 import logging as lg
 lg.basicConfig(level=lg.INFO)
@@ -186,8 +187,10 @@ if __name__ == '__main__':
     lg.info("[" + str(datetime.now().strftime("%d/%m/%Y %H:%M:%S")) + "] Modèle entrainé")
     # Comparer les prévisions de notre modèle avec celles de planifico
     lg.info("[" + str(datetime.now().strftime("%d/%m/%Y %H:%M:%S")) + "] Comparaison des prévisions")
-    erreur_model,erreur_cage = modele_xg.compare2planifico(model,X_test,y_test,prevision_cage,plot = True)
-
+    erreur_model,erreur_cage = modele_xg.compare2planifico(model,X_test,y_test,prevision_cage,plot = False)
     # Hyperparamètres
     lg.info("[" + str(datetime.now().strftime("%d/%m/%Y %H:%M:%S")) + "] Recherche des meilleurs hyperparamètres")
     best_params, best_model = modele_xg.hyperparametres(X_train, y_train, X_test, y_test)
+    # enregistrer le modèle en pickle
+    pickle.dump(best_model, open('model.pkl', 'wb'))
+    lg.info("[" + str(datetime.now().strftime("%d/%m/%Y %H:%M:%S")) + "]Meilleur modèle enregistré")
