@@ -22,63 +22,150 @@ lg.basicConfig(level=lg.INFO)
 
 class pre_process():
     '''
-    Cette class permet de préparer les données pour l'entrainement du modèle
+    Cette classe permet de préparer les données pour l'entrainement du modèle
     '''
-
-    def date2day(date_str):
+    @staticmethod 
+    def date2day(date_object):
         # On ajoute une colonne 'Jour' qui contient le jour de la semaine
         '''
         Cette fonction permet de convertire une date en jour de la semaine
         correspondant
-            * Input :  (Str) Date '%d-%m-%Y'
+            * Input :  (date_object) Date '%d-%m-%Y'
             * Output : (Str) Jour de la semaine
         '''
         # Obtention du jour de la semaine (0 = lundi, 1 = mardi, ..., 6 = dimanche)
-        jour_semaine = date_str.weekday()
+        jour_semaine = date_object.weekday()
         return jour_semaine
 
+    def date2jourferie(date_obj):
+        '''
+        Cette fonction permet de convertire une date en jour férié correspondant
+            * Input :  (Str) Date '%d-%m-%Y'
+            * Output : (Str) Jour férié
+        '''
+
+        # convertie l'object date en str
+        date_str = date_obj.strftime('%Y-%m-%d')
+
+        # Liste des jours fériés au canada
+        jours_feries = [
+        '2022-09-05',  # Fête du travail (Labour Day)
+        '2022-10-10',  # Action de grâce (Thanksgiving)
+        '2022-12-25',  # Noël (Christmas)
+        '2022-12-26',  # Lendemain de Noël (Boxing Day)
+        '2023-01-01',  # Jour de l'An (New Year's Day)
+        '2023-02-20',  # Fête de la famille (Family Day)
+        '2023-04-14',  # Vendredi saint (Good Friday)
+        '2023-05-22',  # Fête de la Reine (Victoria Day)
+        '2023-07-01',  # Fête du Canada (Canada Day)
+        '2023-09-04',  # Fête du travail (Labour Day)
+        '2023-10-09',  # Action de grâce (Thanksgiving)
+        '2023-12-25',  # Noël (Christmas)
+        '2023-12-26'   # Lendemain de Noël (Boxing Day) 
+        ]
+        # Affichage de la saison correspondant à la date donnée
+        if date_str in jours_feries:
+            return 1
+        else:
+            return 0   
+        
+    def date2vacances(date):
+        '''
+        Cette fonction permet de vérifier si une date se trouve pendant les vacances au Canada.
+            * Input :  (str) Date au format '%d-%m-%Y'
+            * Output : (str) 'oui' si c'est pendant les vacances, 'non' sinon
+        '''
+        # Liste des périodes de vacances au Canada
+        vacances = [
+            ('2022-12-17', '2023-01-02'),  # Vacances d'hiver
+            ('2023-03-04', '2023-03-19'),  # Vacances de mars
+            ('2023-06-24', '2023-08-27')   # Vacances d'été
+        ]
+
+        # Vérification si la date se trouve pendant les vacances
+        for debut, fin in vacances:
+            debut_vacances = datetime.strptime(debut, '%Y-%m-%d').date()
+            fin_vacances = datetime.strptime(fin, '%Y-%m-%d').date()
+            if debut_vacances <= date <= fin_vacances:
+                return 1
+
+        return 0
+    
     def get_data(big_chemin = 'prevision/data/'):
         '''
         Cette fonction permet de charger les données d'entrainement
             * Input :  (Str) Chemin vers le dossier contenant les données
             * Output : (DataFrame) Données d'entrainement
         '''
-        # Chemin vers les fichiers
-        attendancePath=big_chemin + "affluence.csv"
-        prevSellsPath=big_chemin + "data_vente.csv"
-        meteoPath=big_chemin + "archive.csv"
-
+        
+    
+        '''
+        Attendance : Nombre de spectateurs prévus
+        '''
         # Fichier des prévisions d'attendance
+        attendancePath=big_chemin + "affluence.csv"
         attendanceDf=pd.read_csv(attendancePath)[['date', 'phq_attendance_stats_sum']]
         attendanceDf = attendanceDf.rename(columns={'phq_attendance_stats_sum': 'attendance'})
+        # Convertie la colonne date en datetime
+        attendanceDf['date']=pd.to_datetime(attendanceDf['date'], format='%Y-%m-%d')
 
+        '''
+        Vente : Vente du restaurant
+        '''
+        prevSellsPath=big_chemin + "data_vente.csv"
         # Fichier des prévisions de ventes
         prevSellsDf=pd.read_csv(prevSellsPath,sep=';')
+        # Convertie la colonne date en datetime
+        prevSellsDf['date']=pd.to_datetime(prevSellsDf['date'], format='%d-%m-%Y')
 
+        '''
+        Méteo
+        '''
+        # Chemin vers les fichiers
+        meteoPath=big_chemin + "archive.csv"
         # Fichier des prévisions météo
         meteoDf=pd.read_csv(meteoPath)
         # Ne pas prendre en compte les 3 premiere ligne du csv
         meteoDf = meteoDf.iloc[3:]
         # Renommer la colonne time en date
         meteoDf = meteoDf.rename(columns={'time': 'date'})
-
+        meteoDf = meteoDf.rename(columns={'apparent_temperature_mean (°C)': 'mean_temp'})
+        meteoDf = meteoDf.rename(columns={'rain_sum (mm)': 'rain'})
+        meteoDf = meteoDf.rename(columns={'snowfall_sum (cm)' : 'snow'})
+        # Convertie la colonne date en datetime
         meteoDf['date']=pd.to_datetime(meteoDf['date'], format='%Y-%m-%d')
-        attendanceDf['date']=pd.to_datetime(attendanceDf['date'], format='%Y-%m-%d')
-        prevSellsDf['date']=pd.to_datetime(prevSellsDf['date'], format='%d-%m-%Y')
 
+        """
+        Merge
+        """
         # Concaténer les DataFrames en utilisant la colonne "date" comme clé de fusion
         df = pd.merge(attendanceDf, prevSellsDf, on='date', how='outer')
         df = pd.merge(df, meteoDf, on='date', how='outer')
-
         # supprimer les lignes avec des valeurs manquantes 
         df = df.dropna()
+        # Réinitialiser les indices
+        df = df.reset_index(drop=True)
 
-
+        '''
+        Jours de la semaine
+        '''
         # On ajoute une colonne date
         df['day'] = df['date'].apply(pre_process.date2day)
         # hot encode day
         df = pd.get_dummies(df, columns=['day'])
 
+        '''
+        Vacances
+        '''
+        # On ajoute une colonne 
+        df['vancance'] = df['date'].apply(pre_process.date2vacances)
+
+        '''
+        Jours fériés
+        '''
+        # On ajoute une colonne
+        df['ferie'] = df['date'].apply(pre_process.date2jourferie)
+        
         X = df.drop(['vente','date'], axis=1)
         y = df['vente']
 
@@ -98,6 +185,7 @@ class modele_xg():
         '''
         Cette classe permet de créer un modèle XGBoost et de l'entrainer sur les données
         '''
+        @staticmethod 
         def train(n_estimators=500, max_depth=15, learning_rate=0.01, subsample=0.6, colsample_bytree=0.6, objective='reg:squarederror',plot = False):
             
             # définir le modèle
@@ -134,9 +222,18 @@ class modele_xg():
             predictions = model.predict(X_test)
             erreur_model = mean_squared_error(predictions, y_test)
             erreur_cage  = mean_squared_error(prevision_cage, y_test)
-            print("Notre prevision : Mean Absolute Error : {}".format(erreur_model))
-            print("Prévision cage : Mean Absolute Error : {}".format(erreur_cage))
+            erreur_model = np.sqrt(erreur_model)
+            erreur_cage = np.sqrt(erreur_cage)
 
+            absolut_error = mean_absolute_error(predictions, y_test)
+            absolut_error_cage = mean_absolute_error(prevision_cage, y_test)
+
+            print("Notre prevision --> MSE : {}, MAE  : {},".format(erreur_model,absolut_error))
+            print("Prévision cage --> MSE : {}, MAE : {}".format(erreur_cage,absolut_error_cage))
+            if erreur_cage>erreur_model:
+                print("Notre modèle est meilleur que la prévision de cage")
+            else:
+                print("La prévision de cage est meilleur que notre modèle")
             if plot:
                 plt.figure(figsize=(20,10))
                 plt.plot(y_test.tolist(), color='blue',label='vente')
@@ -185,24 +282,27 @@ class modele_xg():
             
             return grid_search.best_params_, best_model
     
-        def hyperparametres_random(X_train, y_train, X_test, y_test,plot = False):
+        def hyperparametres_random(X_train, y_train, X_test, y_test,plot = False,param = 'MSE'):
             # Définir les hyperparamètres à tester
             param_grid = {
-                            'n_estimators': [10,100, 200, 500, 1000],
-                            'max_depth': [5,10, 15,25,50,100],
+                            'n_estimators': [10,100, 150 ,  200, 250, 500, 1000],
+                            'max_depth': [5,10, 15,25,50,75,100],
                             'learning_rate': [ 0.5, 0.1, 0.075 ,0.05,0.025 ,0.01, 0.001],
-                            'subsample': [0.2 , 0.4 ,0.6, 0.8, 1.0],
-                            'colsample_bytree': [0.2 , 0.4 ,0.6, 0.8, 1.0],
+                            'subsample': [0.05, 0.1 , 0.2 , 0.4 ,0.6],
+                            'colsample_bytree': [0.1, 0.2 , 0.4 ,0.6, 0.7 , 0.8, 0.9, 1.0],
                             'gamma': [0, 0.1, 0.5, 1.0],
-                            'min_child_weight': [1, 3, 5],
-                            'reg_alpha': [0, 0.01, 0.1, 1.0],
-                            'reg_lambda': [0, 0.01, 0.1, 1.0]
+                            'min_child_weight': [1, 2, 3, 5],
+                            'reg_alpha': [0, 0.001,0.01, 0.1, 1.0],
+                            'reg_lambda': [0, 0.001,0.01, 0.1, 1.0]
                         }
             # Créer le modèle XGBoost
             model = xgb.XGBRegressor(objective='reg:squarederror')
 
             # Effectuer la recherche aléatoire des hyperparamètres
-            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=10, scoring='neg_root_mean_squared_error', cv=5, verbose=1, random_state=42)
+            if param == 'MSE':
+                random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=20, scoring='neg_root_mean_squared_error', cv=5, verbose=1, random_state=42)
+            elif param == 'MAE':
+                random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=20, scoring='neg_mean_absolute_error', cv=5, verbose=1, random_state=42)
             random_search.fit(X_train, y_train)
 
             if plot : 
@@ -256,8 +356,8 @@ class modele_xg():
             # Évaluer les performances du modèle sur les données de test
             y_pred = best_model.predict(X_test)
             rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            print("RMSE :", rmse)
-
+            mae = mean_absolute_error(y_test, y_pred)
+            print("MSE :{}, MAE : {}".format(rmse,mae))
             return best_params, best_model
 
 if __name__ == '__main__':
