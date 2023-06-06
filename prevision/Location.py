@@ -1,3 +1,5 @@
+import math
+
 
 class Location:
     def __init__(self, name:str, lon:int, lat:int, radius:str):
@@ -12,3 +14,5 @@ class Location:
             "lat": self.lat,
             "radius": self.radius
             }
+    def get_location_origin(self):
+        return str(round(self.lat,4))+','+str(round(self.lon,4))
