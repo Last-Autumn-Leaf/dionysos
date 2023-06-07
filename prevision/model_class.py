@@ -349,19 +349,38 @@ class ModeleXG:
         lg.info(f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] Le meilleur modèle a été enregistré")
 
 class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, output_sequence_length):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, output_sequence_length, dropout_rate=0.0, l1_lambda=0.0, l2_lambda=0.0):
         super(RNN, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, output_size)
         self.outlSeqLen = output_sequence_length
+        self.dropout = nn.Dropout(dropout_rate)
+        self.l1_lambda = l1_lambda
+        self.l2_lambda = l2_lambda
 
     def forward(self, x):
         bsize = x.size(0)
         h0 = torch.zeros(self.num_layers, bsize, self.hidden_size, dtype=torch.double).to(device)
         out, _ = self.rnn(x, h0)
+        out = self.dropout(out)  # Dropout layer
         out = self.fc(out[:, -self.outlSeqLen:, :])  # Select the last output_sequence_length time steps and pass through the linear layer
+
+        # L1 regularization
+        if self.l1_lambda > 0:
+            l1_reg = torch.tensor(0.0, dtype=torch.double).to(device)
+            for param in self.parameters():
+                l1_reg += torch.norm(param, p=1)
+            out += self.l1_lambda * l1_reg
+
+        # L2 regularization
+        if self.l2_lambda > 0:
+            l2_reg = torch.tensor(0.0, dtype=torch.double).to(device)
+            for param in self.parameters():
+                l2_reg += torch.norm(param, p=2)
+            out += self.l2_lambda * l2_reg
+
         return out.view(bsize, self.outlSeqLen)
 
 class WindowGenerator(Dataset):
@@ -549,7 +568,7 @@ class modele_rnn():
         print("Meilleurs hyperparamètres :", best_params)
         print("RMSE sur les données de test :", np.sqrt(best_rmse))
 
-        with open('best_model.pkl', 'wb') as f:
+        with open('prevision/model/rnn.pkl', 'wb') as f:
             pickle.dump(best_model, f)
 
         return best_params, best_model
@@ -581,3 +600,9 @@ if __name__ == '__main__':
 
     # Entraînement du modèle
     model = modele_rnn.train(X_train, X_test, y_train, y_test, input_sequence_length, output_sequence_length, hidden_size, num_layers, output_size, batch_size, epochs, learning_rate, plot=True)
+
+'''
+Adapter train et hyperarap au nouvelle couche
+Tester avec float au lieu double
+tester si ca marche
+'''

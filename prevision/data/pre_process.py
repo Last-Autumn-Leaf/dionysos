@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 # predictHQ
 from predicthq import Client
 
+import constante 
 # Class
 class location:
     '''
@@ -39,143 +40,10 @@ class location:
     def get_location_origin(self):
         return str(round(self.lat,4))+','+str(round(self.lon,4))
 
-
-# Constantes
-class constante() : 
-    '''
-    Dans cette classe, on retrouve les constantes utilisées dans le pré-processing des données
-    '''
-
-    # Localisation du restaurant
-    ST_CATH_LOC = location('laCageStCatherine', -73.56362829999999, 45.5077116, '0.5km')
-    MONTREAL_TZ='Canada/Eastern'
-
-    
-    #File path
-    dataDir =  "prevision/data/"
-    affluencePath = dataDir + "affluence.csv"
-    dataVentePath = dataDir + "data_vente.csv"
-    meteoPath = dataDir + "archive.csv"
-
-    # Variables à utiliser pour l'Api de prévision d'attendance PredictHQ
-    ATTENDANCE_BASE_CAT = [
-        "phq_attendance_community",
-        "phq_attendance_concerts",
-        "phq_attendance_conferences",
-        "phq_attendance_expos",
-        "phq_attendance_festivals",
-        "phq_attendance_performing_arts",
-        "phq_attendance_sports",
-        "phq_attendance_academic_graduation",
-        "phq_attendance_academic_social",
-        # "phq_attendance_academic_academic_session",
-        # "phq_attendance_academic_exam",
-        # "phq_attendance_academic_holiday",
-    ]
-    ALL_VIEWERSHIP_CAT = [
-        "phq_viewership_sports",
-        "phq_viewership_sports_american_football",
-        "phq_viewership_sports_american_football_ncaa_men",
-        "phq_viewership_sports_american_football_nfl",
-        "phq_viewership_sports_auto_racing",
-        "phq_viewership_sports_auto_racing_indy_car",
-        "phq_viewership_sports_auto_racing_nascar",
-        "phq_viewership_sports_baseball",
-        "phq_viewership_sports_baseball_mlb",
-        "phq_viewership_sports_baseball_ncaa_men",
-        "phq_viewership_sports_basketball",
-        "phq_viewership_sports_basketball_nba",
-        "phq_viewership_sports_basketball_ncaa_men",
-        "phq_viewership_sports_basketball_ncaa_women",
-        "phq_viewership_sports_boxing",
-        "phq_viewership_sports_golf",
-        "phq_viewership_sports_golf_masters",
-        "phq_viewership_sports_golf_pga_championship",
-        "phq_viewership_sports_golf_pga_tour",
-        "phq_viewership_sports_golf_us_open",
-        "phq_viewership_sports_horse_racing",
-        "phq_viewership_sports_horse_racing_belmont_stakes",
-        "phq_viewership_sports_horse_racing_kentucky_derby",
-        "phq_viewership_sports_horse_racing_preakness_stakes",
-        "phq_viewership_sports_ice_hockey",
-        "phq_viewership_sports_ice_hockey_nhl",
-        "phq_viewership_sports_mma",
-        "phq_viewership_sports_mma_ufc",
-        "phq_viewership_sports_soccer",
-        "phq_viewership_sports_soccer_concacaf_champions_league",
-        "phq_viewership_sports_soccer_concacaf_gold_cup",
-        "phq_viewership_sports_soccer_copa_america_men",
-        "phq_viewership_sports_soccer_fifa_world_cup_women",
-        "phq_viewership_sports_soccer_fifa_world_cup_men",
-        "phq_viewership_sports_soccer_mls",
-        "phq_viewership_sports_soccer_uefa_champions_league_men",
-        "phq_viewership_sports_softball",
-        "phq_viewership_sports_softball_ncaa_women",
-        "phq_viewership_sports_tennis",
-        "phq_viewership_sports_tennis_us_open",
-        "phq_viewership_sports_tennis_wimbledon"
-    ]
-
-    RANK_BASED_CAT = [
-        "phq_rank_daylight_savings",
-        "phq_rank_health_warnings",
-        "phq_rank_observances",
-        "phq_rank_public_holidays",
-        "phq_rank_school_holidays",
-        "phq_rank_politics"
-    ]
-
-
-    ALL_CAT = ATTENDANCE_BASE_CAT + ALL_VIEWERSHIP_CAT + RANK_BASED_CAT
-
-    # Variables à utiliser pour l'Api de prévision d'attendance PredictHQ sur les locations
-    MTL_ID={
-                "id": "6077246",
-                "type": "county",
-                "name": "Montr\u00e9al",
-                "county": "Montr\u00e9al",
-                "region": "Quebec",
-                "country": "Canada",
-                "country_alpha2": "CA",
-                "country_alpha3": "CAN",
-                "location": [
-                    -73.68248,
-                    45.50008
-                ]
-            }
-
-    LACAGE_ID={
-                "id": "6137780",
-                "type": "locality",
-                "name": "Sainte-Catherine",
-                "county": "Mont\u00e9r\u00e9gie",
-                "region": "Quebec",
-                "country": "Canada",
-                "country_alpha2": "CA",
-                "country_alpha3": "CAN",
-                "location": [
-                    -73.58248,
-                    45.40008
-                ]
-            },
-
-    CANADA_ID={
-                "id": "6251999",
-                "type": "country",
-                "name": "Canada",
-                "county": None,
-                "region": None,
-                "country": "Canada",
-                "country_alpha2": "CA",
-                "country_alpha3": "CAN",
-                "location": [
-                    -113.64258,
-                    60.10867
-                ]
-            }
-
 class api():
-    
+    '''
+    Cette classe permet de récupérer les données de PredictHQ
+    '''
     def __init__(self):
         self.access_token = os.getenv("ACCESS_TOKEN_PREDICT_HQ")
         self.phq = Client(access_token=self.access_token)
@@ -230,7 +98,7 @@ class pre_process():
         # Obtention du jour de la semaine (0 = lundi, 1 = mardi, ..., 6 = dimanche)
         jour_semaine = date_object.weekday()
         return jour_semaine
-
+    @staticmethod 
     def date2jourferie(date_obj):
         '''
         Cette fonction permet de convertire une date en jour férié correspondant
@@ -262,7 +130,7 @@ class pre_process():
             return 1
         else:
             return 0   
-        
+    @staticmethod   
     def date2vacances(date):
         '''
         Cette fonction permet de vérifier si une date se trouve pendant les vacances au Canada.
@@ -284,15 +152,15 @@ class pre_process():
                 return 1
 
         return 0
-    
+
+    @staticmethod 
     def get_data(start_date, end_date,big_chemin = 'prevision/data/'):
         '''
         Cette fonction permet de charger les données d'entrainement
             * Input :  (Str) Chemin vers le dossier contenant les données
             * Output : (DataFrame) Données d'entrainement
         '''
-        
-    
+
         '''
         Attendance : Nombre de spectateurs prévus
         '''
@@ -343,10 +211,8 @@ class pre_process():
         Merge
         """
         # Concaténer les DataFrames en utilisant la colonne "date" comme clé de fusion
-        df = pd.merge(attendanceDf, prevSellsDf, on='date', how='outer')
-        df = pd.merge(df, meteoDf, on='date', how='outer')
-        # supprimer les lignes avec des valeurs manquantes 
-        df = df.dropna()
+        df = pd.merge(attendanceDf, prevSellsDf, on='date')
+        df = pd.merge(df, meteoDf, on='date')
         # Réinitialiser les indices
         df = df.reset_index(drop=True)
 
@@ -374,7 +240,8 @@ class pre_process():
         y = df['vente']
 
         return X, y
-
+    
+    @staticmethod 
     def split(X, y,random_state = 7):
         # segmente les données d'entrainement et de validation
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2,random_state=random_state)
@@ -384,3 +251,21 @@ class pre_process():
         X_test = X_test.drop(['prevision'], axis=1)
 
         return X_train, X_test, y_train, y_test, prevision_cage
+
+if __name__ == '__main__':
+    # Connexion à l'API PredictHQ
+    load_dotenv()
+    access_token = os.getenv("ACCESS_TOKEN_PREDICT_HQ")
+    phq = Client(access_token=access_token)
+
+    start_date = "2023-03-08"
+    end_date = "2023-06-05"
+
+    # ID du restaurant
+    dict_lacage = constante.LACAGE_ID 
+    place_id = dict_lacage['id']
+
+    for b in phq.broadcasts.search(start__gte=start_date, start__lte=end_date,
+                                broadcast_status=['scheduled', 'predicted'],location__place_id=place_id):
+        print(b.event.event_id,b.event.title, b.event.category, b.broadcast_status, b.phq_viewership, b.dates.start_local.strftime('%Y-%m-%d'))
+
