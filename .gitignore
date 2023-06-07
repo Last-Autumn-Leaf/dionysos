@@ -5,10 +5,13 @@ __pycache__/
 
 # ENV
 env/
-
+prevision/data/env
 # fichier sensible ou inutile
 avis/api_key.txt
 planning/chromedriver
 
 # Logs
 logs/
+
+.gitignore
+```
