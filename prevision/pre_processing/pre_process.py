@@ -22,7 +22,6 @@ from predicthq import Client
 import prevision.pre_processing.constante as constante
 
 
-
 class api():
     '''
     Cette classe permet de récupérer les données de PredictHQ
