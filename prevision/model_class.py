@@ -4,7 +4,7 @@
 import os
 import sys
 sys.path.append(os.path.dirname( os.path.dirname( os.path.abspath('dionysos') ) ) )
-from data.pre_process import pre_process
+from prevision.pre_processing.pre_process import pre_process
 
 # data manipulation
 import pandas as pd
