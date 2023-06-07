@@ -142,10 +142,7 @@ class pre_process():
             * Input :  (Str) Chemin vers le dossier contenant les données
             * Output : (DataFrame) Données d'entrainement
         '''
-
-        '''
-        Attendance : Nombre de spectateurs prévus
-        '''
+        # Attendance : Nombre de spectateurs prévus
         api_instance = api() 
         attendancePath=big_chemin + "affluence.csv"
         attendanceDf = api_instance.get_features_df(start_date, end_date,attendancePath)
@@ -163,18 +160,14 @@ class pre_process():
         # Convertie la colonne date en datetime
         attendanceDf['date']=pd.to_datetime(attendanceDf['date'], format='%Y-%m-%d')
 
-        '''
-        Vente : Vente du restaurant
-        '''
+        # Vente : Vente du restaurant
         prevSellsPath=big_chemin + "data_vente.csv"
         # Fichier des prévisions de ventes
         prevSellsDf=pd.read_csv(prevSellsPath,sep=';')
         # Convertie la colonne date en datetime
         prevSellsDf['date']=pd.to_datetime(prevSellsDf['date'], format='%d-%m-%Y')
 
-        '''
-        Méteo
-        '''
+        # Méteo
         # Chemin vers les fichiers
         meteoPath=big_chemin + "archive.csv"
         # Fichier des prévisions météo
@@ -189,32 +182,24 @@ class pre_process():
         # Convertie la colonne date en datetime
         meteoDf['date']=pd.to_datetime(meteoDf['date'], format='%Y-%m-%d')
 
-        """
-        Merge
-        """
+        # Merge
         # Concaténer les DataFrames en utilisant la colonne "date" comme clé de fusion
-        df = pd.merge(attendanceDf, prevSellsDf, on='date')
-        df = pd.merge(df, meteoDf, on='date')
+        df = pd.merge(pd.merge(attendanceDf, prevSellsDf, on='date'), meteoDf, on='date')
         # Réinitialiser les indices
         df = df.reset_index(drop=True)
 
-        '''
-        Jours de la semaine
-        '''
+        #Jours de la semaine
         # On ajoute une colonne date
         df['day'] = df['date'].apply(pre_process.date2day)
         # hot encode day
         df = pd.get_dummies(df, columns=['day'])
 
-        '''
-        Vacances
-        '''
+        # Vacances
         # On ajoute une colonne 
         df['vancance'] = df['date'].apply(pre_process.date2vacances)
 
-        '''
-        Jours fériés
-        '''
+
+        #Jours fériés
         # On ajoute une colonne
         df['ferie'] = df['date'].apply(pre_process.date2jourferie)
 
