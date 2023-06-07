@@ -4,14 +4,14 @@ Fichier de constante pour le projet de prévision de vente
 Date: 2023-06-06
 '''
 
-from prevision.data.pre_process import location
+from prevision.pre_process import location
 
 # Localisation du restaurant
 ST_CATH_LOC = location('laCageStCatherine', -73.56362829999999, 45.5077116, '0.5km')
 MONTREAL_TZ='Canada/Eastern'
 
 #File path
-dataDir =  "prevision/data/"
+dataDir =  "prevision/pre_process/data"
 affluencePath = dataDir + "affluence.csv"
 dataVentePath = dataDir + "data_vente.csv"
 meteoPath = dataDir + "archive.csv"

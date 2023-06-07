@@ -19,7 +19,8 @@ from dotenv import load_dotenv
 # predictHQ
 from predicthq import Client
 
-import constante 
+import data.constante as constante
+
 # Class
 class location:
     '''
