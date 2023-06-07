@@ -1,9 +1,0 @@
-modèle à étudier : Le plus simple serait XGBoost
-Le but du modèle ? prédire le chiffre d'affaire un jour donné !
-on utiliseras l'API pour récupérer des données importantes :
-predictHQ nous permet d'avoir des modèles très complexes, (146 events features et +10 catégories)
-Dans un premier temps nous allons simplement l'utiliser pour faire de la demand forcasting
-Localisation FIXE
-date-> demand data
-PredictHQ features nous permettras de sélectionner correctement les évènements importants
-(sport,météo etc...) <category_important_results>

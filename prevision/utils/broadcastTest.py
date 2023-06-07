@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from predicthq import Client
 
-from prevision.constants import MONTREAL_TZ,
+from prevision.api.constants import MONTREAL_TZ,
 
 load_dotenv()
 access_token = os.getenv("ACCESS_TOKEN_PREDICT_HQ")
