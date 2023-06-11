@@ -32,10 +32,14 @@ class api():
         self.selected_cat = constante.ATTENDANCE_BASE_CAT
         self.lieu = constante.ST_CATH_LOC
         self.affluencePath = constante.affluencePath
-    
+
+    def generateAffluence(self):
+        ...
+
     def get_features_df(self, start_date, end_date,affluencePath):
         # Cette fonction permet de récupérer les features de PredictHQ pour un lieu et une liste de catégories données
         if not os.path.exists(affluencePath):
+            #TODO : place this inside generateAffluence()
             lieu = self.lieu
             features_args = {
                 "active__gte": start_date,
@@ -78,8 +82,7 @@ class pre_process():
             * Output : (Str) Jour de la semaine
         '''
         # Obtention du jour de la semaine (0 = lundi, 1 = mardi, ..., 6 = dimanche)
-        jour_semaine = date_object.weekday()
-        return jour_semaine
+        return date_object.weekday()
     @staticmethod 
     def date2jourferie(date_obj):
         '''
@@ -144,7 +147,7 @@ class pre_process():
         '''
         # Attendance : Nombre de spectateurs prévus
         api_instance = api() 
-        attendancePath=big_chemin + "affluence.csv"
+        attendancePath= constante.affluencePath
         attendanceDf = api_instance.get_features_df(start_date, end_date,attendancePath)
         # Fichier des prévisions d'attendance
         attendanceDf=attendanceDf[['date', 'phq_attendance_sports_sum','phq_attendance_conferences_sum','phq_attendance_expos_sum','phq_attendance_concerts_sum','phq_attendance_festivals_sum','phq_attendance_performing_arts_sum','phq_attendance_community_sum']]
@@ -158,18 +161,18 @@ class pre_process():
                                                     'phq_attendance_community_sum': 'spec_community'
                                                     })
         # Convertie la colonne date en datetime
-        attendanceDf['date']=pd.to_datetime(attendanceDf['date'], format='%Y-%m-%d')
+        attendanceDf['date']=pd.to_datetime(attendanceDf['date'], format='%Y-%m-%d').dt.date
 
         # Vente : Vente du restaurant
-        prevSellsPath=big_chemin + "data_vente.csv"
+        prevSellsPath= constante.dataVentePath
         # Fichier des prévisions de ventes
         prevSellsDf=pd.read_csv(prevSellsPath,sep=';')
         # Convertie la colonne date en datetime
-        prevSellsDf['date']=pd.to_datetime(prevSellsDf['date'], format='%d-%m-%Y')
+        prevSellsDf['date']=pd.to_datetime(prevSellsDf['date'], format='%d-%m-%Y').dt.date
 
         # Méteo
         # Chemin vers les fichiers
-        meteoPath=big_chemin + "archive.csv"
+        meteoPath=constante.meteoPath
         # Fichier des prévisions météo
         meteoDf=pd.read_csv(meteoPath)
         # Ne pas prendre en compte les 3 premiere ligne du csv
@@ -180,7 +183,7 @@ class pre_process():
                                           'rain_sum (mm)': 'rain',
                                           'snowfall_sum (cm)' : 'snow'})
         # Convertie la colonne date en datetime
-        meteoDf['date']=pd.to_datetime(meteoDf['date'], format='%Y-%m-%d')
+        meteoDf['date']=pd.to_datetime(meteoDf['date'], format='%Y-%m-%d').dt.date
 
         # Merge
         # Concaténer les DataFrames en utilisant la colonne "date" comme clé de fusion
@@ -195,7 +198,7 @@ class pre_process():
         df = pd.get_dummies(df, columns=['day'])
 
         # Vacances
-        # On ajoute une colonne 
+        # On ajoute une colonne
         df['vancance'] = df['date'].apply(pre_process.date2vacances)
 
 

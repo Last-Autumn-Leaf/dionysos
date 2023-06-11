@@ -3,7 +3,8 @@
 # Our lib
 import os
 import sys
-sys.path.append(os.path.dirname( os.path.dirname( os.path.abspath('dionysos') ) ) )
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath('dionysos'))))
 from prevision.pre_processing.pre_process import pre_process
 
 # data manipulation
@@ -17,7 +18,7 @@ import itertools
 # machine learning
 import xgboost as xgb
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-from sklearn.metrics import mean_absolute_error,mean_squared_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 from pandas.plotting import parallel_coordinates
 from sklearn.preprocessing import MinMaxScaler
 
@@ -25,12 +26,16 @@ from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # log
 from datetime import datetime
 import logging as lg
+
 lg.basicConfig(level=lg.INFO)
+
+import random
 
 class GeneralModel:
     ''' 
@@ -99,10 +104,10 @@ class GeneralModel:
 
         # Regrouper l'importance des day_0, day_1, day_2, day_3, day_4, day_5, day_6 en une seule colonne day
         day_0_index = feature_names.index('day_0')
-        day_importance = np.sum(importance[day_0_index:day_0_index+7])
+        day_importance = np.sum(importance[day_0_index:day_0_index + 7])
         importance[day_0_index] = day_importance
-        importance = np.delete(importance, range(day_0_index+1, day_0_index+7))
-        feature_names = np.delete(feature_names, range(day_0_index+1, day_0_index+7))
+        importance = np.delete(importance, range(day_0_index + 1, day_0_index + 7))
+        feature_names = np.delete(feature_names, range(day_0_index + 1, day_0_index + 7))
         feature_names[day_0_index] = 'day'
         feature_names = feature_names.tolist()
         feature_names = np.array(feature_names)
@@ -124,7 +129,8 @@ class ModeleXG:
     """
 
     @staticmethod
-    def train(X_train, X_test, y_train, y_test, n_estimators=500, max_depth=15, learning_rate=0.01, subsample=0.6, colsample_bytree=0.6, objective='reg:squarederror', plot=False):
+    def train(X_train, X_test, y_train, y_test, n_estimators=500, max_depth=15, learning_rate=0.01, subsample=0.6,
+              colsample_bytree=0.6, objective='reg:squarederror', plot=False):
         """
         Entraîne le modèle XGBoost sur les données d'entraînement et retourne le modèle entraîné.
 
@@ -261,9 +267,11 @@ class ModeleXG:
 
         # Effectuer la recherche aléatoire des hyperparamètres
         if param == 'MSE':
-            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=20, scoring='neg_root_mean_squared_error', cv=5, verbose=1, random_state=42)
+            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=20,
+                                               scoring='neg_root_mean_squared_error', cv=5, verbose=1, random_state=42)
         elif param == 'MAE':
-            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=20, scoring='neg_mean_absolute_error', cv=5, verbose=1, random_state=42)
+            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=20,
+                                               scoring='neg_mean_absolute_error', cv=5, verbose=1, random_state=42)
         random_search.fit(X_train, y_train)
 
         if plot:
@@ -271,7 +279,9 @@ class ModeleXG:
             results_df = pd.DataFrame(random_search.cv_results_)
 
             # Supprimer les colonnes inutiles
-            columns_to_drop = ['params', 'std_fit_time', 'mean_score_time', 'std_score_time', 'rank_test_score', 'split0_test_score', 'split1_test_score', 'split2_test_score', 'split3_test_score', 'split4_test_score']
+            columns_to_drop = ['params', 'std_fit_time', 'mean_score_time', 'std_score_time', 'rank_test_score',
+                               'split0_test_score', 'split1_test_score', 'split2_test_score', 'split3_test_score',
+                               'split4_test_score']
             results_df = results_df.drop(columns=columns_to_drop)
 
             # Renommer les colonnes
@@ -348,40 +358,6 @@ class ModeleXG:
         pickle.dump(best_model, open('prevision/model/xg_boost.pkl', 'wb'))
         lg.info(f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] Le meilleur modèle a été enregistré")
 
-class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, output_sequence_length, dropout_rate=0.0, l1_lambda=0.0, l2_lambda=0.0):
-        super(RNN, self).__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, output_size)
-        self.outlSeqLen = output_sequence_length
-        self.dropout = nn.Dropout(dropout_rate)
-        self.l1_lambda = l1_lambda
-        self.l2_lambda = l2_lambda
-
-    def forward(self, x):
-        bsize = x.size(0)
-        h0 = torch.zeros(self.num_layers, bsize, self.hidden_size, dtype=torch.double).to(device)
-        out, _ = self.rnn(x, h0)
-        out = self.dropout(out)  # Dropout layer
-        out = self.fc(out[:, -self.outlSeqLen:, :])  # Select the last output_sequence_length time steps and pass through the linear layer
-
-        # L1 regularization
-        if self.l1_lambda > 0:
-            l1_reg = torch.tensor(0.0, dtype=torch.double).to(device)
-            for param in self.parameters():
-                l1_reg += torch.norm(param, p=1)
-            out += self.l1_lambda * l1_reg
-
-        # L2 regularization
-        if self.l2_lambda > 0:
-            l2_reg = torch.tensor(0.0, dtype=torch.double).to(device)
-            for param in self.parameters():
-                l2_reg += torch.norm(param, p=2)
-            out += self.l2_lambda * l2_reg
-
-        return out.view(bsize, self.outlSeqLen)
 
 class WindowGenerator(Dataset):
     def __init__(self, X, Y, input_sequence_length, output_sequence_length):
@@ -394,70 +370,120 @@ class WindowGenerator(Dataset):
         return len(self.X) - self.input_sequence_length - self.output_sequence_length + 1
 
     def __getitem__(self, idx):
-        x = self.X[idx:idx + self.input_sequence_length]
-        y = self.Y[idx + self.input_sequence_length:idx + self.input_sequence_length + self.output_sequence_length]
+        # x = self.X[idx:idx + self.input_sequence_length]
+        x=torch.cat((self.X[idx:idx + self.input_sequence_length],self.Y[idx:idx + self.input_sequence_length][:,None]),1)
+        y = self.Y[
+            idx + self.input_sequence_length:idx + self.input_sequence_length + self.output_sequence_length]
         return x, y
+
+    def getInOutSize(self):
+        x,y=self.__getitem__(0)
+        in_size=x.shape[1] if len(x.shape) > 1 else 1
+        out_size=y.shape[1] if len(y.shape) > 1 else 1
+        return in_size,out_size
+
+
+class RNN(nn.Module):
+    def __init__(self, input_size, hidden_size=5, num_layers=1, output_size=1, output_sequence_length=1, *args,
+                 **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hidden_size = hidden_size
+        self.rnn = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+        self.output_sequence_length=output_sequence_length
+        self.output_size=output_size
+
+    def forward(self, x, h=None):
+        out, _ = self.rnn(x, h)
+        out = self.fc(out)
+        return out[:,-self.output_sequence_length:,:] if self.output_size !=1 else out[:,-self.output_sequence_length:,0]
+
 
 class modele_rnn():
     '''
     Cette classe permet de créer un modèle RNN et de l'entrainer sur les données
     '''
-    @staticmethod
-    def get_data(X_train, X_test, y_train, y_test):
-        '''
-        Cette fonction permet de charger les données et de les préparer pour l'entrainement du modèle
-        '''
-        # Convertir les DataFrames en tableaux NumPy
-        X_train_np = X_train.to_numpy()
-        X_test_np = X_test.to_numpy()
-        y_train_np = y_train.to_numpy()
-        y_test_np = y_test.to_numpy()
 
-        # Convertir les tableaux NumPy en tenseurs PyTorch
-        X_train = torch.tensor(X_train_np).double()
-        X_test = torch.tensor(X_test_np).double()
-        y_train = torch.tensor(y_train_np).double()
-        y_test = torch.tensor(y_test_np).double()
+    class Options:
+        def __init__(self, input_sequence_length=10, output_sequence_length=5, hidden_size=128, num_layers=2,
+                     output_size=1, batch_size=64, epochs=50, learning_rate=0.01, dataset_split=0.7,optimizer='ADAM',
+                     momentum=0.9, weight_decay=1e-5,verbose=True,verbose_mod=20,lossFunction='MSE'):
+            self.input_sequence_length = input_sequence_length
+            self.output_sequence_length = output_sequence_length
+            self.hidden_size = hidden_size
+            self.num_layers = num_layers
+            self.output_size = output_size
+            self.batch_size = batch_size
+            self.epochs = epochs
+            self.learning_rate = learning_rate
+            self.dataset_split = dataset_split
+            self.optimizer=optimizer
+            self.momentum=momentum
+            self.weight_decay=weight_decay
+            self.verbose=verbose
+            self.verbose_mod=verbose_mod
+            self.lossFunction=lossFunction
 
+        def getModelOptions(self):
+            return {
+                'hidden_size': self.hidden_size,
+                'num_layers': self.num_layers,
+                'output_sequence_length': self.output_sequence_length
+            }
 
-        # Créer un objet MinMaxScaler
-        scaler = MinMaxScaler()
-        # Normaliser les données d'entraînement
-        X_train = scaler.fit_transform(X_train)
-        # Normaliser les données de test
-        X_test = scaler.transform(X_test)
+    def __init__(self, x, y, options=None):
+        self.options = options if options else self.Options()
 
-        return X_train, X_test, y_train, y_test
-       
-    @staticmethod
-    def train(X_train, X_test, y_train, y_test, input_sequence_length, output_sequence_length, hidden_size, num_layers, output_size, batch_size, epochs, learning_rate, plot=False):
-        
-        # Adapter les données pour le modèle
-        X_train, X_test, y_train, y_test = modele_rnn.get_data(X_train, X_test, y_train, y_test)
+        self.x = torch.tensor(x.to_numpy(dtype=float)).float()
+        self.y = torch.tensor(y.to_numpy(dtype=float)).float()
+        # self.x = torch.tensor(MinMaxScaler().fit_transform(self.x))
+        self.split_dataset()
 
-        # Créer les datasets et les dataloaders
-        train_dataset = WindowGenerator(X_train, y_train, input_sequence_length, output_sequence_length)
-        test_dataset = WindowGenerator(X_test, y_test, input_sequence_length, output_sequence_length)
+        train_dataset = WindowGenerator(self.x_train, self.y_train, self.options.input_sequence_length,
+                                        self.options.output_sequence_length)
+        test_dataset = WindowGenerator(self.x_test, self.y_test, self.options.input_sequence_length,
+                                       self.options.output_sequence_length)
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+        self.input_size,self.output_size = train_dataset.getInOutSize()
 
-        model = RNN(X_train.shape[1], hidden_size, num_layers, output_size, output_sequence_length).to(device)
-        model.double()  # Ajouter cette ligne pour convertir le modèle en double
+        self.train_loader = DataLoader(train_dataset, batch_size=self.options.batch_size, shuffle=False)
+        self.test_loader = DataLoader(test_dataset, batch_size=self.options.batch_size, shuffle=False)
 
-        criterion = nn.MSELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    def split_dataset(self):
+        n = len(self.x)
+        dataset_split = self.options.dataset_split
+        self.x_train = self.x[:int(n * dataset_split)]
+        self.y_train = self.y[:int(n * dataset_split)]
+        self.x_test = self.x[int(n * dataset_split):]
+        self.y_test = self.y[int(n * dataset_split):]
 
-        train_losses = []  # Liste pour enregistrer les pertes d'entraînement
-        test_losses = []  # Liste pour enregistrer les pertes de test
+    def train(self, plot=False):
+        model = RNN(input_size=self.input_size,
+                    output_size=self.output_size,
+                    **self.options.getModelOptions())
 
-        for epoch in range(epochs):
+        if self.options.lossFunction=='MSE':
+            criterion = nn.MSELoss()
+        elif self.options.lossFunction=='MAE':
+            criterion = nn.L1Loss()
+        elif self.options.lossFunction=='SMOOTHL1':
+            criterion=nn.SmoothL1Loss()
+        else :
+            return print("unrecognized loss function")
+        #TODO : the ADAM string should be in a macro !
+        if self.options.optimizer=='ADAM':
+            optimizer = torch.optim.Adam(model.parameters(), lr=self.options.learning_rate)
+        else :
+            optimizer = torch.optim.SGD(model.parameters(), lr=self.options.learning_rate,
+                    momentum=self.options.momentum, weight_decay=self.options.weight_decay)
+
+        train_losses = []
+        test_losses = []
+        counter=0
+        for epoch in range(self.options.epochs):
             model.train()
             train_loss = 0.0
-
-            for x, y in train_loader:
-                x = x.to(device).double()
-                y = y.to(device).double()
+            for x, y in self.train_loader:
 
                 optimizer.zero_grad()
                 outputs = model(x)
@@ -467,24 +493,26 @@ class modele_rnn():
 
                 train_loss += loss.item()
 
-            train_loss /= len(train_loader)
+            train_loss /= len(self.train_loader)
             train_losses.append(train_loss)  # Enregistrer la perte d'entraînement pour chaque époque
 
             model.eval()
             test_loss = 0.0
 
             with torch.no_grad():
-                for x, y in test_loader:
-                    x = x.to(device).double()
-                    y = y.to(device).double()
+                for x, y in self.test_loader:
+                    x = x
+                    y = y
                     outputs = model(x)
                     loss = criterion(outputs, y)
                     test_loss += loss.item()
 
-                test_loss /= len(test_loader)
+                test_loss /= len(self.test_loader)
                 test_losses.append(test_loss)  # Enregistrer la perte de test pour chaque époque
-
-            print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
+            if self.options.verbose:
+                counter=(counter+1)%self.options.verbose_mod
+                if counter==0 :
+                    print(f"Epoch {epoch + 1}/{self.options.epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
 
         if plot:
             plt.figure(figsize=(10, 6))
@@ -496,110 +524,156 @@ class modele_rnn():
             plt.legend()
             plt.show()
 
+            self.test(model)
+
         return model
 
-    @staticmethod
-    def hyperparametres_random_search(X_train, X_test, y_train, y_test, input_sequence_length, output_sequence_length, output_size, batch_size, epochs, learning_rate, hidden_size_range, num_layers_range, param_grid, num_iterations=20):
-        # Adapter les données pour le modèle
-        X_train, X_test, y_train, y_test = modele_rnn.get_data(X_train, X_test, y_train, y_test)
-        
-        # Créer les datasets et les dataloaders
-        train_dataset = WindowGenerator(X_train, y_train, input_sequence_length, output_sequence_length)
-        test_dataset = WindowGenerator(X_test, y_test, input_sequence_length, output_sequence_length)
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-        # Définir les paramètres de la recherche aléatoire
-        best_params = {}
-        best_model = None
-        best_rmse = float('inf')
+    def test(self,model):
+        # Plot the sequence and predicted sequence
+        model.eval()
+        with torch.no_grad():
+            # Get the first sequence from the test dataset
+            # if we try to test the over fitting we should take train_loader else take test_loader
+            x_plot, target_sequence = self.train_loader.dataset[0]
+            x_plot = x_plot.unsqueeze(0)  # Add a batch dimension
 
-        # Generate all possible combinations of hyperparameters
-        hyperparameter_combinations = list(itertools.product(hidden_size_range, num_layers_range, *param_grid.values()))
-        # 
-        for _ in range(num_iterations):
-            # Randomly select hyperparameter combination
-            hyperparameters = random.choice(hyperparameter_combinations)
-            hidden_size, num_layers = hyperparameters[:2]
-            other_hyperparameters = hyperparameters[2:]
+            predicted_sequence = model(x_plot)
+            predicted_sequence = predicted_sequence.squeeze().numpy()
 
-            model = RNN(X_train.shape[1], hidden_size, num_layers, output_size, output_sequence_length).to(device)
-            model.double()
+            history_sequence = x_plot[0,:, -1]
+            # Plot the original sequence
+            plt.plot(range(self.options.input_sequence_length+self.options.output_sequence_length),
+                     torch.cat((history_sequence,target_sequence)), label='True sequence',
+                        linestyle="-", marker="o",)
 
-            criterion = nn.MSELoss()
-            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            plt.plot(range(self.options.input_sequence_length,
+                        self.options.input_sequence_length+self.options.output_sequence_length),predicted_sequence.tolist(),
+                        linestyle="-", marker="o",label='predicted sequence')
 
-            for epoch in range(epochs):
-                model.train()
-                train_loss = 0.0
 
-                for x, y in train_loader:
-                    x = x.to(device).double()
-                    y = y.to(device).double()
+            plt.xlabel('Time Step')
+            plt.ylabel('Value')
+            plt.title('Sequence and Predicted Sequence')
+            plt.legend()
+            plt.show()
 
-                    optimizer.zero_grad()
-                    outputs = model(x)
-                    loss = criterion(outputs, y)
-                    loss.backward()
-                    optimizer.step()
+    # @staticmethod
+    # def hyperparametres_random_search(X_train, X_test, y_train, y_test, input_sequence_length, output_sequence_length, output_size, batch_size, epochs, learning_rate, hidden_size_range, num_layers_range, param_grid, num_iterations=20):
+    #     # Adapter les données pour le modèle
+    #     X_train, X_test, y_train, y_test = modele_rnn.get_data(X_train, X_test, y_train, y_test)
+    #
+    #     # Créer les datasets et les dataloaders
+    #     train_dataset = WindowGenerator(X_train, y_train, input_sequence_length, output_sequence_length)
+    #     test_dataset = WindowGenerator(X_test, y_test, input_sequence_length, output_sequence_length)
+    #
+    #     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    #     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    #     # Définir les paramètres de la recherche aléatoire
+    #     best_params = {}
+    #     best_model = None
+    #     best_rmse = float('inf')
+    #
+    #     # Generate all possible combinations of hyperparameters
+    #     hyperparameter_combinations = list(itertools.product(hidden_size_range, num_layers_range, *param_grid.values()))
+    #     #
+    #     for _ in range(num_iterations):
+    #         # Randomly select hyperparameter combination
+    #         hyperparameters = random.choice(hyperparameter_combinations)
+    #         hidden_size, num_layers = hyperparameters[:2]
+    #         other_hyperparameters = hyperparameters[2:]
+    #
+    #         model = RNN(X_train.shape[1], hidden_size, num_layers, output_size, output_sequence_length).to(device)
+    #         model.double()
+    #
+    #         criterion = nn.MSELoss()
+    #         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    #
+    #         for epoch in range(epochs):
+    #             model.train()
+    #             train_loss = 0.0
+    #
+    #             for x, y in train_loader:
+    #                 x = x.to(device).double()
+    #                 y = y.to(device).double()
+    #
+    #                 optimizer.zero_grad()
+    #                 outputs = model(x)
+    #                 loss = criterion(outputs, y)
+    #                 loss.backward()
+    #                 optimizer.step()
+    #
+    #                 train_loss += loss.item()
+    #
+    #             train_loss /= len(train_loader)
+    #
+    #             model.eval()
+    #             test_loss = 0.0
+    #
+    #             with torch.no_grad():
+    #                 for x, y in test_loader:
+    #                     x = x.to(device).double()
+    #                     y = y.to(device).double()
+    #                     outputs = model(x)
+    #                     loss = criterion(outputs, y)
+    #                     test_loss += loss.item()
+    #
+    #                 test_loss /= len(test_loader)
+    #
+    #             if test_loss < best_rmse:
+    #                 best_rmse = test_loss
+    #                 best_params = {'hidden_size': hidden_size, 'num_layers': num_layers, **dict(zip(param_grid.keys(), other_hyperparameters))}
+    #                 best_model = model
+    #
+    #     print("Meilleurs hyperparamètres :", best_params)
+    #     print("RMSE sur les données de test :", np.sqrt(best_rmse))
+    #
+    #     with open('prevision/model/rnn.pkl', 'wb') as f:
+    #         pickle.dump(best_model, f)
+    #
+    #     return best_params, best_model
+    #
+    # @staticmethod
+    # def load_model(path):
+    #     # Charger le modèle à partir du fichier pickle
+    #     with open(path, 'rb') as f:
+    #         model = pickle.load(f)
+    #     return model
 
-                    train_loss += loss.item()
 
-                train_loss /= len(train_loader)
+def fixSeed(seed=0):
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
-                model.eval()
-                test_loss = 0.0
-
-                with torch.no_grad():
-                    for x, y in test_loader:
-                        x = x.to(device).double()
-                        y = y.to(device).double()
-                        outputs = model(x)
-                        loss = criterion(outputs, y)
-                        test_loss += loss.item()
-
-                    test_loss /= len(test_loader)
-
-                if test_loss < best_rmse:
-                    best_rmse = test_loss
-                    best_params = {'hidden_size': hidden_size, 'num_layers': num_layers, **dict(zip(param_grid.keys(), other_hyperparameters))}
-                    best_model = model
-
-        print("Meilleurs hyperparamètres :", best_params)
-        print("RMSE sur les données de test :", np.sqrt(best_rmse))
-
-        with open('prevision/model/rnn.pkl', 'wb') as f:
-            pickle.dump(best_model, f)
-
-        return best_params, best_model
-
-    @staticmethod
-    def load_model(path):
-        # Charger le modèle à partir du fichier pickle
-        with open(path, 'rb') as f:
-            model = pickle.load(f)
-        return model
-
+fixSeed()
 if __name__ == '__main__':
     # Date de début et de fin de la saison
     start_date = "2023-03-08"
     end_date = "2023-06-05"
 
-    X,y = pre_process.get_data(start_date,end_date)
-    X_train, X_test, y_train, y_test, prevision_cage = pre_process.split(X, y,random_state = 42)
-
     # Initialisation des hyperparamètres
-    input_sequence_length = 10
-    output_sequence_length = 5
-    hidden_size = 128
-    num_layers = 2
-    output_size = 1
-    batch_size = 64
-    epochs = 50
-    learning_rate = 0.01
+    parameters = {
+        "input_sequence_length": 7,
+        "output_sequence_length": 2,
+        "hidden_size": 124,
+        "num_layers": 32,
+        "output_size": 1,
+        "batch_size": 32,
+        "epochs": 100,
+        "learning_rate": 1,
+        'dataset_split': 0.7,
+        'optimizer':'SGD',
+        'momentum' :0.9,
+        'weight_decay':1e-5,
+        'lossFunction':'SMOOTHL1'
+    }
+    options = modele_rnn.Options(**parameters)
+    X, y = pre_process.get_data(start_date, end_date)
+    rnn_model = modele_rnn(X, y, options=options)
 
     # Entraînement du modèle
-    model = modele_rnn.train(X_train, X_test, y_train, y_test, input_sequence_length, output_sequence_length, hidden_size, num_layers, output_size, batch_size, epochs, learning_rate, plot=True)
+    model = rnn_model.train(plot=True)
 
 '''
 Adapter train et hyperarap au nouvelle couche
