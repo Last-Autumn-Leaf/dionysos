@@ -36,16 +36,13 @@ meteoPath = dataDir / "archive.csv"
 
 # Variables à utiliser pour l'Api de prévision d'attendance PredictHQ
 ATTENDANCE_BASE_CAT = [
-    "phq_attendance_community",
     "phq_attendance_concerts",
     "phq_attendance_conferences",
     "phq_attendance_expos",
     "phq_attendance_festivals",
     "phq_attendance_performing_arts",
-    "phq_attendance_sports",
-    "phq_attendance_academic_graduation",
-    "phq_attendance_academic_social",
-]
+    "phq_attendance_sports" ]
+
 ALL_VIEWERSHIP_CAT = [
     "phq_viewership_sports",
     "phq_viewership_sports_american_football",

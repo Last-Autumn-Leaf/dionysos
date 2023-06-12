@@ -19,7 +19,11 @@ from dotenv import load_dotenv
 # predictHQ
 from predicthq import Client
 
-import prevision.pre_processing.constante as constante
+# Our Lib
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath('dionysos'))))
+import pre_processing.constante as constante
 
 
 class api():
@@ -32,19 +36,15 @@ class api():
         self.selected_cat = constante.ATTENDANCE_BASE_CAT
         self.lieu = constante.ST_CATH_LOC
         self.affluencePath = constante.affluencePath
-
-    def generateAffluence(self):
-        ...
-
+    
     def get_features_df(self, start_date, end_date,affluencePath):
         # Cette fonction permet de récupérer les features de PredictHQ pour un lieu et une liste de catégories données
         if not os.path.exists(affluencePath):
-            #TODO : place this inside generateAffluence()
             lieu = self.lieu
             features_args = {
                 "active__gte": start_date,
                 "active__lte": end_date,
-                "location__geo": lieu.get_location(),
+                "location__geo": lieu,
             }
             for cat in self.selected_cat:
                 features_args[cat + "__stats"] = ["sum", "count"]
@@ -82,7 +82,8 @@ class pre_process():
             * Output : (Str) Jour de la semaine
         '''
         # Obtention du jour de la semaine (0 = lundi, 1 = mardi, ..., 6 = dimanche)
-        return date_object.weekday()
+        jour_semaine = date_object.weekday()
+        return jour_semaine
     @staticmethod 
     def date2jourferie(date_obj):
         '''
@@ -150,25 +151,24 @@ class pre_process():
         attendancePath= constante.affluencePath
         attendanceDf = api_instance.get_features_df(start_date, end_date,attendancePath)
         # Fichier des prévisions d'attendance
-        attendanceDf=attendanceDf[['date', 'phq_attendance_sports_sum','phq_attendance_conferences_sum','phq_attendance_expos_sum','phq_attendance_concerts_sum','phq_attendance_festivals_sum','phq_attendance_performing_arts_sum','phq_attendance_community_sum']]
+        attendanceDf=attendanceDf[['date', 'phq_attendance_sports_sum','phq_attendance_conferences_sum','phq_attendance_expos_sum','phq_attendance_concerts_sum','phq_attendance_festivals_sum','phq_attendance_performing_arts_sum']]
         attendanceDf = attendanceDf.rename(columns= {
                                                     'phq_attendance_sports_sum': 'spec_sports',
                                                     'phq_attendance_conferences_sum': 'spec_conferences',
                                                     'phq_attendance_expos_sum': 'spec_expos',
                                                     'phq_attendance_concerts_sum': 'spec_concerts',
                                                     'phq_attendance_festivals_sum': 'spec_festivals',
-                                                    'phq_attendance_performing_arts_sum': 'spec_performing_arts',
-                                                    'phq_attendance_community_sum': 'spec_community'
+                                                    'phq_attendance_performing_arts_sum': 'spec_performing_arts'
                                                     })
         # Convertie la colonne date en datetime
-        attendanceDf['date']=pd.to_datetime(attendanceDf['date'], format='%Y-%m-%d').dt.date
+        attendanceDf['date']=pd.to_datetime(attendanceDf['date'], format='%Y-%m-%d')
 
         # Vente : Vente du restaurant
-        prevSellsPath= constante.dataVentePath
+        prevSellsPath=constante.dataVentePath
         # Fichier des prévisions de ventes
         prevSellsDf=pd.read_csv(prevSellsPath,sep=';')
         # Convertie la colonne date en datetime
-        prevSellsDf['date']=pd.to_datetime(prevSellsDf['date'], format='%d-%m-%Y').dt.date
+        prevSellsDf['date']=pd.to_datetime(prevSellsDf['date'], format='%d-%m-%Y')
 
         # Méteo
         # Chemin vers les fichiers
@@ -183,7 +183,7 @@ class pre_process():
                                           'rain_sum (mm)': 'rain',
                                           'snowfall_sum (cm)' : 'snow'})
         # Convertie la colonne date en datetime
-        meteoDf['date']=pd.to_datetime(meteoDf['date'], format='%Y-%m-%d').dt.date
+        meteoDf['date']=pd.to_datetime(meteoDf['date'], format='%Y-%m-%d')
 
         # Merge
         # Concaténer les DataFrames en utilisant la colonne "date" comme clé de fusion
@@ -198,9 +198,8 @@ class pre_process():
         df = pd.get_dummies(df, columns=['day'])
 
         # Vacances
-        # On ajoute une colonne
+        # On ajoute une colonne 
         df['vancance'] = df['date'].apply(pre_process.date2vacances)
-
 
         #Jours fériés
         # On ajoute une colonne
@@ -208,7 +207,6 @@ class pre_process():
 
         X = df.drop(['vente','date'], axis=1)
         y = df['vente']
-
         return X, y
     
     @staticmethod 
@@ -225,17 +223,4 @@ class pre_process():
 if __name__ == '__main__':
     # Connexion à l'API PredictHQ
     load_dotenv()
-    access_token = os.getenv("ACCESS_TOKEN_PREDICT_HQ")
-    phq = Client(access_token=access_token)
-
-    start_date = "2023-03-08"
-    end_date = "2023-06-05"
-
-    # ID du restaurant
-    dict_lacage = constante.LACAGE_ID 
-    place_id = dict_lacage['id']
-
-    for b in phq.broadcasts.search(start__gte=start_date, start__lte=end_date,
-                                broadcast_status=['scheduled', 'predicted'],location__place_id=place_id):
-        print(b.event.event_id,b.event.title, b.event.category, b.broadcast_status, b.phq_viewership, b.dates.start_local.strftime('%Y-%m-%d'))
-
+    

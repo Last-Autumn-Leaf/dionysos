@@ -3,33 +3,31 @@
 # Our lib
 import os
 import sys
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath('dionysos'))))
-from prevision.pre_processing.pre_process import pre_process
+from pre_processing.pre_process import pre_process
 
-# data manipulation
+# Data manipulation
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 import random
-import itertools
 
-# machine learning
+# Machine learning
 import xgboost as xgb
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from pandas.plotting import parallel_coordinates
 from sklearn.preprocessing import MinMaxScaler
 
-# torch
+# Torch
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# log
+# Log
 from datetime import datetime
 import logging as lg
 
@@ -675,8 +673,3 @@ if __name__ == '__main__':
     # Entraînement du modèle
     model = rnn_model.train(plot=True)
 
-'''
-Adapter train et hyperarap au nouvelle couche
-Tester avec float au lieu double
-tester si ca marche
-'''
