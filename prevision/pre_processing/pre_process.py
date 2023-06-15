@@ -6,7 +6,6 @@ Auteur : Ilyas Baktache
 '''
 
 # Importation des librairies
-
 # Data manipulation
 import pandas as pd
 # Machine learning
@@ -84,7 +83,7 @@ class api_weather():
         if not os.path.exists(self.meteoPath):
             latitude = self.latitude
             longitude = self.longitude
-            list_data_daily = ['apparent_temperature_max','apparent_temperature_min','sunset','uv_index_max','precipitation_sum','rain_sum','showers_sum','snowfall_sum','precipitation_hours']
+            list_data_daily = ['apparent_temperature_max','apparent_temperature_min','sunset','uv_index_max','rain_sum','showers_sum','snowfall_sum','precipitation_hours']
             
             # Passer des liste à des str séparé par des virgules
             list_data_daily = ','.join(list_data_daily)
