@@ -56,20 +56,44 @@ class WindowGenerator(Dataset):
 
 
 class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size=5, num_layers=1, output_size=1, output_sequence_length=1, *args,
-                 **kwargs):
+    def __init__(self, input_size, model_type='LSTM', hidden_size=5, num_layers=1, output_size=1, output_sequence_length=1, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.hidden_size = hidden_size
-        self.rnn = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        if model_type == 'GRU':
+            self.rnn = nn.GRU(input_size, hidden_size, num_layers, batch_first=True)
+        elif model_type == 'LSTM':
+            self.rnn = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        elif model_type == 'SimpleRNN':
+            self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
+        elif model_type == 'LSTMCell':
+            self.rnn = nn.LSTMCell(input_size, hidden_size)
+        elif model_type == 'GRUCell':
+            self.rnn = nn.GRUCell(input_size, hidden_size)
+        elif model_type == 'RNNCell':
+            self.rnn = nn.RNNCell(input_size, hidden_size)
+        else:
+            raise Exception('Model not implemented')
         self.fc = nn.Linear(hidden_size, output_size)
-        self.output_sequence_length=output_sequence_length
-        self.output_size=output_size
+        self.output_sequence_length = output_sequence_length
+        self.output_size = output_size
 
     def forward(self, x, h=None):
-        out, _ = self.rnn(x, h)
+        if self.rnn.__class__.__name__ in ['LSTMCell', 'GRUCell', 'RNNCell']:
+            # For cell-based models, iterate through the time steps manually
+            h = torch.zeros(x.size(0), self.hidden_size, device=x.device) if h is None else h
+            c = torch.zeros(x.size(0), self.hidden_size, device=x.device) if h is None and self.rnn.__class__.__name__ == 'LSTMCell' else None
+            outputs = []
+            for i in range(x.size(1)):
+                if self.rnn.__class__.__name__ == 'LSTMCell':
+                    h, c = self.rnn(x[:, i, :], (h, c))
+                else:
+                    h = self.rnn(x[:, i, :], h)
+                outputs.append(h.unsqueeze(1))
+            out = torch.cat(outputs, dim=1)
+        else:
+            out, _ = self.rnn(x, h)
         out = self.fc(out)
-        return out[:,-self.output_sequence_length:,:] if self.output_size !=1 else out[:,-self.output_sequence_length:,0]
-
+        return out[:, -self.output_sequence_length:, :] if self.output_size != 1 else out[:, -self.output_sequence_length:, 0]
 
 class modele_rnn():
     '''
@@ -77,12 +101,13 @@ class modele_rnn():
     '''
 
     class Options:
-        def __init__(self, input_sequence_length=10, output_sequence_length=5, hidden_size=128, num_layers=2,
+        def __init__(self, input_sequence_length=10, output_sequence_length=5,model_type = 'LSTM',hidden_size=128, num_layers=2,
                      output_size=1, batch_size=64, epochs=50, learning_rate=0.01, dataset_split=0.7,optimizer='ADAM',
                      momentum=0.9, weight_decay=1e-5,verbose=True,verbose_mod=20,lossFunction='MSE'):
             self.input_sequence_length = input_sequence_length
             self.output_sequence_length = output_sequence_length
             self.hidden_size = hidden_size
+            self.model_type = model_type
             self.num_layers = num_layers
             self.output_size = output_size
             self.batch_size = batch_size
@@ -100,7 +125,8 @@ class modele_rnn():
             return {
                 'hidden_size': self.hidden_size,
                 'num_layers': self.num_layers,
-                'output_sequence_length': self.output_sequence_length
+                'output_sequence_length': self.output_sequence_length,
+                'model_type' : self.model_type
             }
 
     def __init__(self, x, y, options=None):
@@ -151,7 +177,7 @@ class modele_rnn():
 
         train_losses = []
         test_losses = []
-        counter=0
+        counter = self.options.verbose_mod - 1
         for epoch in range(self.options.epochs):
             model.train()
             train_loss = 0.0
@@ -182,8 +208,8 @@ class modele_rnn():
                 test_loss /= len(self.test_loader)
                 test_losses.append(test_loss)  # Enregistrer la perte de test pour chaque époque
             if self.options.verbose:
-                counter=(counter+1)%self.options.verbose_mod
-                if counter==0 :
+                counter = (counter + 1) % self.options.verbose_mod
+                if counter == 0 or epoch == self.options.epochs - 1:
                     print(f"Epoch {epoch + 1}/{self.options.epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
 
         if plot:
@@ -192,43 +218,43 @@ class modele_rnn():
             plt.plot(test_losses, label='Test Loss')
             plt.xlabel('Epoch')
             plt.ylabel('Loss')
-            plt.title('Training and Test Loss Evolution')
+            plt.title('Training and Test Loss Evolution for {}'.format(self.options.model_type))
             plt.legend()
             plt.show()
-
-            self.test(model)
 
         return model
 
 
-    def test(self,model):
-        # Plot the sequence and predicted sequence
+    def test(self, model):
         model.eval()
         with torch.no_grad():
-            # Get the first sequence from the test dataset
-            # if we try to test the over fitting we should take train_loader else take test_loader
-            x_plot, target_sequence = self.train_loader.dataset[0]
-            x_plot = x_plot.unsqueeze(0)  # Add a batch dimension
+            # Get a batch of data from the test loader
+            x_test, y_test = next(iter(self.test_loader))
 
-            predicted_sequence = model(x_plot)
+            # Forward pass through the model
+            predicted_sequence = model(x_test)
+            print(predicted_sequence)
+            # Convert the predicted sequence and target sequence to numpy arrays
             predicted_sequence = predicted_sequence.squeeze().numpy()
+            target_sequence = y_test.numpy()
 
-            history_sequence = x_plot[0,:, -1]
-            # Plot the original sequence
-            plt.plot(range(self.options.input_sequence_length+self.options.output_sequence_length),
-                     torch.cat((history_sequence,target_sequence)), label='True sequence',
-                        linestyle="-", marker="o",)
+            # Plot the original sequence and the predicted sequence
+            for i in range(self.options.batch_size):
+                history_sequence = x_test[i, :, -1].numpy()
 
-            plt.plot(range(self.options.input_sequence_length,
-                        self.options.input_sequence_length+self.options.output_sequence_length),predicted_sequence.tolist(),
-                        linestyle="-", marker="o",label='predicted sequence')
+                plt.plot(range(self.options.input_sequence_length + self.options.output_sequence_length),
+                        np.concatenate((history_sequence, target_sequence[i])), label='True sequence',
+                        linestyle="-", marker="o")
+                
+                plt.plot(range(self.options.input_sequence_length, self.options.input_sequence_length + self.options.output_sequence_length),
+                        predicted_sequence[i].tolist(), linestyle="-", marker="o", label='Predicted sequence')
 
+                plt.xlabel('Time Step')
+                plt.ylabel('Value')
+                plt.title('Sequence and Predicted Sequence')
+                plt.legend()
+                plt.show()
 
-            plt.xlabel('Time Step')
-            plt.ylabel('Value')
-            plt.title('Sequence and Predicted Sequence')
-            plt.legend()
-            plt.show()
 
     # @staticmethod
     # def hyperparametres_random_search(X_train, X_test, y_train, y_test, input_sequence_length, output_sequence_length, output_size, batch_size, epochs, learning_rate, hidden_size_range, num_layers_range, param_grid, num_iterations=20):
@@ -313,6 +339,7 @@ class modele_rnn():
     #     return model
 
 
+
 def fixSeed(seed=0):
     torch.manual_seed(seed)
     random.seed(seed)
@@ -328,6 +355,7 @@ if __name__ == '__main__':
     parameters = {
         "input_sequence_length": 7,
         "output_sequence_length": 2,
+        "model_type" : "LSTM",
         "hidden_size": 124,
         "num_layers": 32,
         "output_size": 1,
@@ -346,4 +374,4 @@ if __name__ == '__main__':
 
     # Entraînement du modèle
     model = rnn_model.train(plot=True)
-
+    rnn_model.test(model)

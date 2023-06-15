@@ -16,15 +16,13 @@ import locale
 # Définir la langue française
 locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
 
-# Gerer latex
-from pylatex import Document, Section, Subsection, Command, Center
-from pylatex.utils import NoEscape, bold, italic, escape_latex
+# Gerer html
+from jinja2 import Environment, FileSystemLoader
 
 # GPT
 import openai
 
 # analyse des sentimennts 
-import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
 
 # Gerer les logs
@@ -246,87 +244,47 @@ class rapport():
         return reponse_avis
 
         
-    def create_latex(nom_mois,old_sum,nom='La Cage',chemin_fichier_csv ='avis/data.csv'):
-        
+    def create_report(nom_mois, old_sum, nom='La Cage', chemin_fichier_csv='avis/data.csv'):
         '''
-        Cette fonction crée un document LaTeX qui contient le rapport des avis d'un mois donné
+        Cette fonction crée un document complet en utilisant le modèle HTML pour le rapport des avis d'un mois donné
         '''
-        # recupere le fichier csv avis/data.csv
-        # recuperation des données
-        lg.info("[" + str(datetime.now().strftime("%d/%m/%Y %H:%M:%S")) + "] Début de la création du rapport")
+        # Récupération des données
         nb_avis, moyenne, progression = rapport.get_review_month(nom_mois)
         nb_positif, nb_negatif, nb_neutre = feeling.nb_sentim(nom_mois)
-        # recuperation des données sur les points d'amélioration
         summary, improvement_points, improvement_observationsmary = gpt.generate_report(chemin_fichier_csv, nom_mois, old_sum)
-        # recuperation des réponses aux avis
-        reponse_avis = rapport.get_rep_review_month(nom_mois,chemin_fichier_csv = 'avis/data.csv')
-        # Création du document LaTeX
-        doc = Document('rapport')
-        titre = "Rapport d'analyse des avis de la Cage pour le mois de {}".format(nom_mois)
-        # Informations générales
-        doc.append(Command('begin', 'center'))
-        doc.append(Command('textbf',Command('Large',titre)))
-        doc.append(Command("\ "))
-        doc.append(Command('vspace', '0.5cm'))
-        doc.append(Command('today'))
-        doc.append(Command('end', 'center'))
-
-        doc.append(Command('vspace', '1cm'))
+        reponse_avis = rapport.get_rep_review_month(nom_mois, chemin_fichier_csv='avis/data.csv')
         
-        # Page de titre
-        with doc.create(Section('Analyse des tendances')):
-            doc.append(Command('begin', 'itemize'))
-            doc.append(Command('item', 'Pour ce mois, on retrouve {} avis dont {} avis positif ({}%), {} avis négatif ({}%) et {} avis neutre ({}%)  '.format(nb_avis,nb_positif,round(nb_positif/nb_avis*100,2),nb_negatif,round(nb_negatif/nb_avis*100,2),nb_neutre,round(nb_neutre/nb_avis*100,2))))
-            doc.append(Command('item', 'Note moyenne : {}/5'.format(moyenne)))
-            if str(progression) != 'nan' : 
-                doc.append(Command('begin', 'itemize'))
-                if progression > 0:
-                    doc.append(Command('item', 'La moyenne des avis est en progression de {}% par rapport au mois passé'.format(progression)))
-                elif progression < 0:
-                    doc.append(Command('item', 'La moyenne des avis est en régression de {}% par rapport au mois passé'.format(progression)))
-                else:
-                    doc.append(Command('item', 'La moyenne des avis est stable par rapport au mois passé'))
-                doc.append(Command('end', 'itemize'))   
-            doc.append(Command('end', 'itemize'))
-
-        # Résumé du mois
-        with doc.create(Section('Résumé du mois')):
-            # Section résumé des avis
-            doc.append(summary)
-            doc.append(Command('vspace', '0.5cm'))
-
-        # Section Sugestions et Ameliorations
-        with doc.create(Section('Points clés à améliorer')):
-            doc.append('Les points clé à améliorer pour ce mois sont:')
-            # Conversion en liste d'items
-            items = improvement_points.split('\n')
-            items = [item.strip().lstrip('- ') for item in items if item.strip()]
-
-            # Génération du code LaTeX
-            doc.append(Command('begin', 'itemize'))
-            for item in items:
-                doc.append(Command('item', item))
-            doc.append(Command('end', 'itemize'))
-            doc.append(Command('vspace', '0.5cm'))
-        with doc.create(Section('Améliorations observées par rapport aux mois passés')):
-            doc.append(improvement_observationsmary)
-
-        # Feuille des réponses aux avis
-        with doc.create(Section('Réponses aux avis')):
-            doc.append(reponse_avis)
-
-        try :
-            # Générer le fichier PDF du rapport
-            doc.generate_pdf('avis/rapport/{}'.format(nom_mois), clean_tex=True)
-        except :
-            pass
+        # Récupération de la date du jour
+        today = datetime.today().strftime("%d/%m/%Y")
+        
+        # Configuration de Jinja2
+        env = Environment(loader=FileSystemLoader('.'))
+        template = env.get_template('template.html')
+        
+        # Génération du rapport complet en utilisant le modèle HTML
+        rapport_complet = template.render(
+            nom_mois=nom_mois,
+            date=today,
+            nb_avis=nb_avis,
+            nb_positif=nb_positif,
+            nb_negatif=nb_negatif,
+            nb_neutre=nb_neutre,
+            nb_positif_pct=round(nb_positif/nb_avis*100,2),
+            nb_negatif_pct=round(nb_negatif/nb_avis*100,2),
+            nb_neutre_pct=round(nb_neutre/nb_avis*100,2),
+            moyenne=moyenne,
+            progression=progression,
+            summary=summary,
+            improvement_points=improvement_points,
+            improvement_observationsmary=improvement_observationsmary,
+            reponse_avis=reponse_avis
+        )
+        
+        # Écriture du rapport complet dans un fichier
+        with open('avis/rapport/{}'.format(nom_mois), 'w') as f:
+            f.write(rapport_complet)
 
         return summary
-    def clean_file(chemin = 'avis/rapport/'):
-        # Supprimer les fichiers temporaires du répertoire courant
-        for filename in os.listdir("avis/rapport"):
-            if filename.endswith(('.aux', '.log', '.out', '.synctex.gz', '.tex','.fdb_latexmk','.fls')):
-                os.remove(chemin + filename)
 
     def multi_rap(mois):
         all_sum = [ 'pas de résumé pour le mois précédent']
@@ -347,11 +305,11 @@ class gpt():
 
     def generate_summary(avis,mois):
         # Paramètres de la génération de texte avec GPT
-        model = "gpt-3.5-turbo"
+        model = "gpt-3.5-turbo-16k"
         max_tokens = 2500
 
         # Génération du résumé des avis du mois
-        prompt = "Fais moi un résumé en français des avis du mois de {} :".format(mois)
+        prompt = " Give me a summary of the reviews for the month {} :".format(mois)
         messages = [
             {"role": "system", "content": prompt},
             {"role": "user", "content": avis}
@@ -367,7 +325,7 @@ class gpt():
 
     def generate_improvement_points(avis,mois):
         # Paramètres de la génération de texte avec GPT
-        model = "gpt-3.5-turbo"
+        model = "gpt-3.5-turbo-16k"
         max_tokens = 2500
 
         # Génération des propositions de points d'amélioration
@@ -387,7 +345,7 @@ class gpt():
 
     def sumary2sum(sum):
         # Paramètres de la génération de texte avec GPT
-        model = "gpt-3.5-turbo"
+        model = "gpt-3.5-turbo-16k"
         max_tokens = 100
 
         # Génération du résumé des avis du mois
@@ -403,6 +361,7 @@ class gpt():
         )
         summary = response.choices[0].message.content.strip()
         return summary
+    
     def generate_improvement_observations(sum,old_sum,mois):
         # Paramètres de la génération de texte avec GPT
         model = "gpt-3.5-turbo"

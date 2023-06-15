@@ -16,7 +16,6 @@ MONTREAL_TZ='Canada/Eastern'
 from pathlib import Path
 project_name="dionysos"
 def setProjectpath():
-    print("setting file path")
     project_dir = Path.cwd()
     while project_dir.name != project_name:
         project_dir = project_dir.parent
@@ -32,7 +31,7 @@ project_dir=setProjectpath()
 dataDir =  project_dir / 'prevision' / 'pre_processing' / 'data'
 affluencePath = dataDir / "affluence.csv"
 dataVentePath = dataDir / "data_vente.csv"
-meteoPath = dataDir / "archive.csv"
+meteoPath = dataDir / "meteo.csv"
 
 # Variables à utiliser pour l'Api de prévision d'attendance PredictHQ
 ATTENDANCE_BASE_CAT = [

@@ -84,7 +84,7 @@ class utils_model():
 
         # Triez les fonctionnalités par importance décroissante
         feature_names = X_train.columns.tolist()
-
+        
         # Regrouper l'importance des day_0, day_1, day_2, day_3, day_4, day_5, day_6 en une seule colonne day
         day_0_index = feature_names.index('day_0')
         day_importance = np.sum(importance[day_0_index:day_0_index + 7])
@@ -92,6 +92,17 @@ class utils_model():
         importance = np.delete(importance, range(day_0_index + 1, day_0_index + 7))
         feature_names = np.delete(feature_names, range(day_0_index + 1, day_0_index + 7))
         feature_names[day_0_index] = 'day'
+
+        # Regrouper l'importance des vente_day_1, vente_day_2, vente_day_3, vente_day_4, vente_day_5, vente_day_6, vente_day_7 en une seule colonne vente_day
+        feature_names = list(feature_names)
+        vente_day_1_index = feature_names.index('vente_day_1')
+        vente_day_importance = np.sum(importance[vente_day_1_index:vente_day_1_index + 7])
+        importance[vente_day_1_index] = vente_day_importance
+        importance = np.delete(importance, range(vente_day_1_index + 1, vente_day_1_index + 7))
+        feature_names = np.delete(feature_names, range(vente_day_1_index + 1, vente_day_1_index + 7))
+        feature_names[vente_day_1_index] = 'vente_old'
+
+        # Lister les fonctionnalités par importance décroissante
         feature_names = feature_names.tolist()
         feature_names = np.array(feature_names)
         indices = np.argsort(importance)[::-1]

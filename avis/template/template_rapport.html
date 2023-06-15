@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Rapport d'analyse des avis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            width: 150px;
+            height: auto;
+        }
+        
+        h1 {
+            margin-top: 0;
+        }
+        
+        h2 {
+            margin-top: 40px;
+        }
+        
+        ul {
+            padding-left: 20px;
+        }
+        
+        p {
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="/Users/mac2021/Documents/Projet/Projet Dionysos/dionysos/avis/template/logo.png" alt="Logo" class="logo">
+        <h1>Rapport d'analyse des avis pour le mois de {{ nom_mois }}</h1>
+        <p>Date du jour : {{ date }}</p>
+    </div>
+    
+    <h2>Informations générales</h2>
+    <ul>
+        <li>Nombre d'avis : {{ nb_avis }}</li>
+        <li>Nombre d'avis positifs : {{ nb_positif }} ({{ nb_positif_pct }}%)</li>
+        <li>Nombre d'avis négatifs : {{ nb_negatif }} ({{ nb_negatif_pct }}%)</li>
+        <li>Nombre d'avis neutres : {{ nb_neutre }} ({{ nb_neutre_pct }}%)</li>
+    </ul>
+    
+    <h2>Statistiques</h2>
+    <ul>
+        <li>Note moyenne : {{ moyenne }}/5</li>
+        {% if progression %}
+            <li>
+                {% if progression > 0 %}
+                    La moyenne des avis est en progression de {{ progression }}% par rapport au mois passé.
+                {% elif progression < 0 %}
+                    La moyenne des avis est en régression de {{ progression }}% par rapport au mois passé.
+                {% else %}
+                    La moyenne des avis est stable par rapport au mois passé.
+                {% endif %}
+            </li>
+        {% endif %}
+    </ul>
+    
+    <h2>Résumé du mois</h2>
+    <p>{{ summary }}</p>
+    
+    <h2>Points clés à améliorer</h2>
+    <ul>
+        {% for point in improvement_points %}
+            <li>{{ point }}</li>
+        {% endfor %}
+    </ul>
+    
+    <h2>Améliorations observées par rapport aux mois passés</h2>
+    <p>{{ improvement_observationsmary }}</p>
+    
+    <h2>Réponses aux avis</h2>
+    {{ reponse_avis }}
+</body>
+</html>
