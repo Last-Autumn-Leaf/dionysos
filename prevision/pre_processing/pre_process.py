@@ -43,7 +43,11 @@ class utils_preprocess():
                 break
         return project_dir
     
-    def get_api_key(provider,chemin = os.path.join('api_key.txt')):
+    def get_api_key(provider):
+        # Direction vers le fichier api_key.txt
+        project_dir=utils_preprocess.setProjectpath()
+        Dir =  project_dir / 'prevision' / 'pre_processing'
+        chemin = Dir / 'api_key.txt'
         """Récupère la clé d'API dans le fichier api_key.txt pour le fournisseur spécifié"""
         with open(chemin, 'r') as f:
             api_keys = f.readlines()
@@ -193,14 +197,14 @@ class api_predicthq():
         # On verifie si la periode de temps demandé est inférieur à 90 jours
         if len(date_list) <= 90:
             # On récupère les données d'attendance sur la période demandée
-            dataframe_attendance = api_predicthq.get_df_attendance_90(start_date, end_date)
+            dataframe_attendance = api_predicthq.get_df_attendance_90(self,start_date, end_date)
         else:
             # On crée des paquets de 90 jours pour récuperer les données d'attendance
             batch_day_list = api_predicthq.batch_day(start_date,end_date)
             # On récupère les données d'attendance sur chaque paquet de 90 jours
             feature_list = []
             for batch in batch_day_list:
-                dataframe_attendance_batch = api_predicthq.get_df_attendance_90(batch[0],batch[-1])
+                dataframe_attendance_batch = api_predicthq.get_df_attendance_90(self,batch[0],batch[-1])
                 feature_list.append(dataframe_attendance_batch)
             # On concatène les données d'attendance
             dataframe_attendance = pd.concat(feature_list, ignore_index=True)
@@ -218,7 +222,7 @@ class api_predicthq():
         end_date = pd.to_datetime('today').strftime('%Y-%m-%d')
 
         # On récupère les données d'attendance sur la période demandée
-        df_attendance_new = api_predicthq.get_df_attendance(start_date, end_date)
+        df_attendance_new = api_predicthq.get_df_attendance(self,start_date, end_date)
         # On supprime les lignes qui sont déjà dans le df_attendance
         df_attendance_new = df_attendance_new[~df_attendance_new['date'].isin(df_attendance['date'])]
         # On ajoute les nouvelles données d'attendance au df_attendance
@@ -235,11 +239,11 @@ class api_predicthq():
             # On récupère les données d'attendance
             df_attendance = pd.read_csv(self.attendancePath)
             if today_date != df_attendance['date'].max() : 
-                df_attendance = api_predicthq.update_df_attendance(df_attendance)
+                df_attendance = api_predicthq.update_df_attendance(self,df_attendance)
             return df_attendance
         else:
             last_year_date = (pd.to_datetime('today') - pd.DateOffset(years=1) + pd.DateOffset(days=1) ).strftime('%Y-%m-%d')
-            df_attendance = api_predicthq.get_df_attendance(last_year_date, today_date)
+            df_attendance = api_predicthq.get_df_attendance(self,last_year_date, today_date)
             return df_attendance
 
 
@@ -426,7 +430,7 @@ class pre_process():
 
         # Vacances
         # On ajoute une colonne 
-        df['vancance'] = df['date'].apply(pre_process.date2vacances)
+        df['vacance'] = df['date'].apply(pre_process.date2vacances)
 
         # Jours fériés
         # On ajoute une colonne

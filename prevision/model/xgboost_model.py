@@ -5,36 +5,35 @@ Date : 06/06/2023
 @Auteur : Ilyas Baktache
 '''
 
-
 # Librairie
-
 # Our lib
 import os
 import sys
 sys.path.append( os.path.dirname( os.path.dirname( os.path.abspath(__file__) ) ) )
-from pre_processing.pre_process import pre_process
+from pre_processing.pre_process import pre_process,utils_preprocess
 
 # Data manipulation
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
-
+import random
 # Machine learning
 import xgboost as xgb
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from pandas.plotting import parallel_coordinates
+from sklearn.model_selection import cross_val_score
+from itertools import chain, combinations
 
 # Log
 from datetime import datetime
 import logging as lg
-
+from tqdm import trange
 lg.basicConfig(level=lg.INFO)
 
-import random
 
-class ModeleXG:
+class general():
     """
     Cette classe permet de créer un modèle XGBoost et de l'entraîner sur les données
     """
@@ -91,9 +90,13 @@ class ModeleXG:
             plt.show()
 
         return model
-
+    
+class hyperparametres():
+    """
+    Cette classe permet de créer un modèle XGBoost et de l'entraîner sur les données
+    """
     @staticmethod
-    def hyperparametres_grid(X_train, y_train, X_test, y_test):
+    def grid(X_train, y_train, X_test, y_test):
         """
         Effectue une recherche par grille des meilleurs hyperparamètres pour le modèle XGBoost.
 
@@ -143,7 +146,7 @@ class ModeleXG:
         return grid_search.best_params_, best_model
 
     @staticmethod
-    def hyperparametres_random(X_train, y_train, X_test, y_test, plot=False, param='MSE'):
+    def random(X_train, y_train, X_test, y_test, plot=False, param='MSE',nb_iter = 100,random_state= 5):
         """
         Effectue une recherche aléatoire des meilleurs hyperparamètres pour le modèle XGBoost.
 
@@ -162,8 +165,8 @@ class ModeleXG:
         """
         # Définir les hyperparamètres à tester
         param_grid = {
-            'n_estimators': [10, 100, 150, 200, 250, 500, 1000],
-            'max_depth': [5, 10, 15, 25, 50, 75, 100],
+            'n_estimators': [10, 100, 150, 200, 250, 500, 1000,2000,10000],
+            'max_depth': [1,5,10,20,50, 75, 100, 200, 500],
             'learning_rate': [0.5, 0.1, 0.075, 0.05, 0.025, 0.01, 0.001],
             'subsample': [0.05, 0.1, 0.2, 0.4, 0.6],
             'colsample_bytree': [0.1, 0.2, 0.4, 0.6, 0.7, 0.8, 0.9, 1.0],
@@ -178,11 +181,11 @@ class ModeleXG:
 
         # Effectuer la recherche aléatoire des hyperparamètres
         if param == 'MSE':
-            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=20,
-                                               scoring='neg_root_mean_squared_error', cv=5, verbose=1, random_state=42)
+            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=nb_iter,
+                                               scoring='neg_root_mean_squared_error', cv=5, verbose=0, random_state=random_state)
         elif param == 'MAE':
-            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=20,
-                                               scoring='neg_mean_absolute_error', cv=5, verbose=1, random_state=42)
+            random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=nb_iter,
+                                               scoring='neg_mean_absolute_error', cv=5, verbose=0, random_state=random_state)
         random_search.fit(X_train, y_train)
 
         if plot:
@@ -228,7 +231,6 @@ class ModeleXG:
 
         # Obtenir les meilleurs hyperparamètres
         best_params = random_search.best_params_
-        print("Meilleurs hyperparamètres :", best_params)
 
         # Entraîner le modèle final avec les meilleurs hyperparamètres
         best_model = xgb.XGBRegressor(**best_params)
@@ -238,13 +240,11 @@ class ModeleXG:
         y_pred = best_model.predict(X_test)
         rmse = np.sqrt(mean_squared_error(y_test, y_pred))
         mae = mean_absolute_error(y_test, y_pred)
-        print("MSE :", rmse)
-        print("MAE :", mae)
 
-        return best_params, best_model
+        return best_params, best_model , rmse, mae
 
     @staticmethod
-    def save_best_model(start_date, end_date):
+    def save_best_model():
         """
         Enregistre le meilleur modèle XGBoost entraîné sur les données spécifiées.
 
@@ -255,7 +255,7 @@ class ModeleXG:
 
         # Charger les données
         lg.info(f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] Chargement des données")
-        X, y = pre_process.get_data(start_date, end_date)
+        X, y = pre_process.get_data()
 
         # Segmenter les données
         X_train, X_test, y_train, y_test, prevision_cage = pre_process.split(X, y, random_state=7)
@@ -263,11 +263,95 @@ class ModeleXG:
 
         # Recherche des meilleurs hyperparamètres
         lg.info(f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] Recherche des meilleurs hyperparamètres")
-        best_params, best_model = ModeleXG.hyperparametres_random(X_train, y_train, X_test, y_test)
+        best_params, best_model, rmse, mae = hyperparametres.random(X_train, y_train, X_test, y_test)
 
-        # Enregistrer le modèle en pickle
-        pickle.dump(best_model, open('prevision/model/xg_boost.pkl', 'wb'))
+        # Enregistrer le modèle
+        project_dir=utils_preprocess.setProjectpath()
+        Dir =  project_dir / 'prevision' / 'model' / 'results'
+        chemin_pkl = Dir / 'xg_boost_{}.pkl'.format(datetime.now().strftime('%d%m%Y_%H%M%S'))
+        pickle.dump(best_model, open(chemin_pkl, 'wb'))
         lg.info(f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] Le meilleur modèle a été enregistré")
 
+
+class feature():
+    @staticmethod
+    def powerset(iterable):
+        # Get all subsets of a set
+        s = list(iterable)
+        return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
+
+    @staticmethod
+    def optimal_set(X, y, n_combinations = 1000,critere='MAE', nb_iter=5, random_state=1):
+        
+        # Initialiser les features
+        base_features = ['prevision', 'vacance', 'ferie', 'apparent_temperature_max', 'apparent_temperature_min',
+                        'sunset', 'uv_index_max', 'showers_sum', 'rain_sum', 'snowfall_sum', 'precipitation_hours',
+                        'attendance_concerts', 'attendance_conferences', 'attendance_expos', 'attendance_festivals',
+                        'attendance_performing_arts', 'attendance_sports', 'day_0', 'vente_day_1']
+
+        day_features = ['day_1', 'day_2', 'day_3', 'day_4', 'day_5', 'day_6']
+        vente_day_features = ['vente_day_2', 'vente_day_3', 'vente_day_4', 'vente_day_5', 'vente_day_6', 'vente_day_7']
+        
+        # Initialiser les variables
+        min_score = float('inf')
+        best_features = None
+        best_model = None
+
+        # Nom du fichier pour les resultats
+        project_dir=utils_preprocess.setProjectpath()
+        Dir =  project_dir / 'prevision' / 'model' / 'results'
+        chemin_txt_file = Dir / 'test_feature_{}.txt'.format(datetime.now().strftime('%d%m%Y_%H%M%S'))
+
+        subsets = list(feature.powerset(base_features))
+        # Randomly select a subset of combinations to test
+        random.seed(random_state)
+        random_subsets = random.sample(subsets, n_combinations)
+        with open(chemin_txt_file, 'a') as file:
+            for i in trange(len(random_subsets)):
+                subset = random_subsets[i]
+                # Include day_features and vente_day_features if day_0 and vente_day_1 respectively are in the subset
+                features = set(subset)
+                features.add('prevision')  # Ensure that 'prevision' is always included
+                # Skip this iteration if there are no features besides 'prevision'
+                if len(features) <= 1:
+                    continue
+                if 'day_0' in features:
+                    features.update(day_features)
+                if 'vente_day_1' in features:
+                    features.update(vente_day_features)
+
+                X_temp = X[list(features)]
+                # Segmenter les données
+                X_train, X_test, y_train, y_test, prevision_cage = pre_process.split(X_temp, y, random_state=random_state)
+                # Recherche des meilleurs hyperparamètres
+                best_params, best_model, rmse, mae = hyperparametres.random(X_train, y_train, X_test, y_test, nb_iter=nb_iter,
+                                                                            random_state=random_state)
+                result_line = f"Pour la combinaison {features}, on retrouve un RMSE:{rmse} et un MAE: {mae}\n"
+                file.write(result_line)
+
+                if critere == 'MAE':
+                    mean_score = mae
+                elif critere == 'RMSE':
+                    mean_score = rmse
+
+                # Update the best score and feature set
+                if mean_score < min_score:
+                    min_score = mean_score
+                    best_features = features
+                    best_model = best_model
+
+        return best_model, best_features, min_score
+
+    def launch_test():
+        # Charger les données
+        lg.info(f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] Chargement des données")
+        X, y = pre_process.get_data()
+
+        best_features, min_score = feature.optimal_set(X, y)
+        print("Best features: {}, min score: {}".format(best_features, min_score))
+
 if __name__ == '__main__' :
-    print("Entraînement du modèle XGBoost")
+
+    # Charger les données
+    feature.launch_test()
+    # Charger les données
