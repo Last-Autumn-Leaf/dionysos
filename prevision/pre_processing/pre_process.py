@@ -12,11 +12,6 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 # Time
 from datetime import datetime
-# Os 
-import os
-from dotenv import load_dotenv
-# predictHQ
-from predicthq import Client
 
 # request
 import requests
@@ -27,49 +22,226 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pre_processing.constante as constante
+from pathlib import Path
 
+# Logging
+import logging as lg
+lg.basicConfig(level=lg.INFO)
+
+class utils_preprocess():
+    '''
+    Regroupe les fonctions utilitaires
+    '''
+    project_name="dionysos"
+    def setProjectpath():
+        project_dir = Path.cwd()
+        while project_dir.name != utils_preprocess.project_name:
+            project_dir = project_dir.parent
+            if project_dir.parent==project_dir:
+                ValueError(f"Le dossier parent '{utils_preprocess.project_name}' n'a pas été trouvé.")
+                print("project directory not found")
+                break
+        return project_dir
+    
+    def get_api_key(provider,chemin = os.path.join('api_key.txt')):
+        """Récupère la clé d'API dans le fichier api_key.txt pour le fournisseur spécifié"""
+        with open(chemin, 'r') as f:
+            api_keys = f.readlines()
+
+        for api_key in api_keys:
+            if api_key.startswith(provider):
+                return api_key.split(':')[1].strip()
+        # Si aucune clé n'a été trouvée pour le fournisseur spécifié
+        return None
 
 class api_predicthq():
     '''
     Cette classe permet de récupérer les données de PredictHQ
     '''
     def __init__(self):
-        self.access_token_PHQ = os.getenv("ACCESS_TOKEN_PREDICT_HQ")
-        self.phq = Client(access_token=self.access_token_PHQ)
+        # Get API key
+        self.access_token_PHQ = utils_preprocess.get_api_key('PredictHQ')
+        # constantes
         self.selected_cat = constante.ATTENDANCE_BASE_CAT
         self.lieu = constante.ST_CATH_LOC
-        self.affluencePath = constante.affluencePath
+        self.attendancePath = constante.affluencePath
     
-    def get_features_df(self, start_date, end_date,affluencePath):
-        # Cette fonction permet de récupérer les features de PredictHQ pour un lieu et une liste de catégories données
-        if not os.path.exists(affluencePath):
-            lieu = self.lieu
-            features_args = {
-                "active__gte": start_date,
-                "active__lte": end_date,
-                "location__geo": lieu,
-            }
-            for cat in self.selected_cat:
-                features_args[cat + "__stats"] = ["sum", "count"]
-                features_args[cat + "__phq_rank"] = {"gt": 0}
+    def get_id_place(self,address):
+        '''
+        Cette fonction permet de récupérer l'id d'un lieu à partir de son adresse
 
-            feature_list = []
-            for feature in self.phq.features.obtain_features(**features_args):
-                feature_dict = {"date": feature.date}
-                for cat in self.selected_cat:
-                    feature_dict[cat + "_sum"] = feature.data[cat]["sum"]
-                    feature_dict[cat + "_count"] = feature.data[cat]["count"]
-                    feature_dict[cat + "_rank"] = feature.data[cat]["phq_rank"]
-                feature_list.append(feature_dict)
+        Parameters
+        ----------
+        address : str
+            Adresse du lieu
+
+        Returns
+        -------
+        id : str
+            Id du lieu
+        longitude : float
+            Longitude du lieu
+        latitude : float
+            Latitude du lieu
+
+        '''
+        response = requests.get(
+            url="https://api.predicthq.com/v1/places/",
+            headers={
+            "Authorization": f"Bearer {self.access_token_PHQ}",
+            "Accept": "application/json"
+            },
+            params={
+                "q": address,
+                "limit": 2
+            }
+        )
+
+        data = response.json()
+        id = data['results'][0]['id']
+        longitude = data['results'][0]['location'][0]
+        latitude = data['results'][0]['location'][1]
+
+        return id, longitude, latitude
+
+    def get_df_attendance_90(self,start_date,end_date):
+        '''
+        Cette fonction permet de récupérer les données d'attendance pour une période de 90 jours ou moins
+
+        Parameters
+        ----------
+        start_date : str
+            Date de début de la période
+        end_date : str
+            Date de fin de la période
+        location_geo : list
+            Coordonnées géographiques du lieu
+
+        Returns
+        -------
+        df : DataFrame
+            DataFrame contenant les données d'attendance
+
+        '''
+        # Recuperer les noms des types d'evenements
+        ATTENDANCE_BASE_CAT = self.selected_cat
+        # Création du dictionnaire de données
+        data = {
+            "active": {
+                "gte": start_date,
+                "lte": end_date
+            },
+            "location": {
+                "geo": self.lieu
+            }
+        }
+        # Ajouter les événements au dictionnaire
+        for event in ATTENDANCE_BASE_CAT:
+            data[event] = True
+        # Appel de l'API
+        response = requests.post(
+            url="https://api.predicthq.com/v1/features",
+            headers={
+            "Authorization": f"Bearer {self.access_token_PHQ}",
+            "Accept": "application/json"
+            },
+            json=data
+        )
+        api_result = response.json()
+        # Création d'un dictionnaire pour stocker les données finales
+        list_attendance = {'date': []}
+        # Ajouter les événements au dictionnaire
+        for event in ATTENDANCE_BASE_CAT:
+            list_attendance[event[4:]] = []
+        try : 
+            # Parcourir les résultats et extraire les données
+            for result in api_result['results']:
+                list_attendance['date'].append(result['date'])
+                for event in ATTENDANCE_BASE_CAT:
+                    list_attendance[event[4:]].append(result[event]['stats']['sum'])
+
+            # Création du DataFrame à partir des données d'attendance
+            df = pd.DataFrame(list_attendance)
+            return df
+        except:
+            lg.error("Error in Api Call and results :{}".format(api_result['errors']))
+            return pd.DataFrame()
             
-            df = pd.DataFrame(feature_list)
-            df = df.set_index("date")
-            df["phq_attendance_stats_sum"] = df.filter(regex=r'^phq_attendance.*sum$').sum(axis=1)
-            df["phq_attendance_stats_count"] = df.filter(regex=r'^phq_attendance.*count').sum(axis=1)
-            df.to_csv(affluencePath)
-        else :
-            df = pd.read_csv(affluencePath)
-        return df
+    @staticmethod
+    def batch_day(start_date,end_date):
+        '''
+        Cette fonction permet de créer des paquets de 90 jours pour récuperer les données d'attendance.
+        '''
+        # On crée une liste de date entre start_date et end_date
+        date_list = pd.date_range(start_date, end_date).tolist()
+        # On crée des paquets de 90 jours
+        batch_list = []
+        for i in range(0,len(date_list),90):
+            batch_list.append(date_list[i:i+90])
+        # convertir les dates en str et en format YYYY-MM-DD
+        for i in range(len(batch_list)):
+            batch_list[i] = [str(date)[:10] for date in batch_list[i]]
+        return batch_list
+
+    def get_df_attendance(self,start_date,end_date):
+        '''
+        L'API de PredictHQ ne permet pas de récupérer plus de 90 jours d'événements.
+        Cette fonction permet de récupérer les données d'attendance sur une période plus longue.
+        '''
+        # On crée une liste de date entre start_date et end_date
+        date_list = pd.date_range(start_date, end_date).tolist()
+        # On verifie si la periode de temps demandé est inférieur à 90 jours
+        if len(date_list) <= 90:
+            # On récupère les données d'attendance sur la période demandée
+            dataframe_attendance = api_predicthq.get_df_attendance_90(start_date, end_date)
+        else:
+            # On crée des paquets de 90 jours pour récuperer les données d'attendance
+            batch_day_list = api_predicthq.batch_day(start_date,end_date)
+            # On récupère les données d'attendance sur chaque paquet de 90 jours
+            feature_list = []
+            for batch in batch_day_list:
+                dataframe_attendance_batch = api_predicthq.get_df_attendance_90(batch[0],batch[-1])
+                feature_list.append(dataframe_attendance_batch)
+            # On concatène les données d'attendance
+            dataframe_attendance = pd.concat(feature_list, ignore_index=True)
+        
+        # On enregistre les données d'attendance
+        dataframe_attendance.to_csv(self.attendancePath, index=False)
+        return dataframe_attendance
+
+    def update_df_attendance(self,df_attendance):
+        '''
+        Cette fonction permet de mettre à jour les données d'attendance.
+        '''
+        # On récupère la date de la dernière ligne du df_attendance
+        start_date = df_attendance['date'].max()
+        end_date = pd.to_datetime('today').strftime('%Y-%m-%d')
+
+        # On récupère les données d'attendance sur la période demandée
+        df_attendance_new = api_predicthq.get_df_attendance(start_date, end_date)
+        # On supprime les lignes qui sont déjà dans le df_attendance
+        df_attendance_new = df_attendance_new[~df_attendance_new['date'].isin(df_attendance['date'])]
+        # On ajoute les nouvelles données d'attendance au df_attendance
+        df_attendance = pd.concat([df_attendance, df_attendance_new], ignore_index=True)
+        # enregistrer le df_attendance
+        df_attendance.to_csv(self.attendancePath, index=False)
+        return df_attendance
+
+    def get_today_df_attendance(self):
+        # On récupère la date du jour
+        today_date = pd.to_datetime('today').strftime('%Y-%m-%d')
+        
+        if os.path.exists(self.attendancePath):
+            # On récupère les données d'attendance
+            df_attendance = pd.read_csv(self.attendancePath)
+            if today_date != df_attendance['date'].max() : 
+                df_attendance = api_predicthq.update_df_attendance(df_attendance)
+            return df_attendance
+        else:
+            last_year_date = (pd.to_datetime('today') - pd.DateOffset(years=1) + pd.DateOffset(days=1) ).strftime('%Y-%m-%d')
+            df_attendance = api_predicthq.get_df_attendance(last_year_date, today_date)
+            return df_attendance
+
 
 class api_weather():
 
@@ -80,26 +252,45 @@ class api_weather():
 
     def get_meteodata(self, start_date, end_date):
         # recupere les donnée méteo de https://api.open-meteo.com/v1/
-        if not os.path.exists(self.meteoPath):
-            latitude = self.latitude
-            longitude = self.longitude
-            list_data_daily = ['apparent_temperature_max','apparent_temperature_min','sunset','uv_index_max','rain_sum','showers_sum','snowfall_sum','precipitation_hours']
-            
-            # Passer des liste à des str séparé par des virgules
-            list_data_daily = ','.join(list_data_daily)
+        latitude = self.latitude
+        longitude = self.longitude
+        list_data_daily = ['apparent_temperature_max','apparent_temperature_min','sunset','uv_index_max','rain_sum','showers_sum','snowfall_sum','precipitation_hours']
+        
+        # Passer des liste à des str séparé par des virgules
+        list_data_daily = ','.join(list_data_daily)
 
-            lien =' https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily={}&start_date={}&end_date={}&timezone=America%2FNew_York'.format(latitude,longitude,list_data_daily,start_date,end_date)
+        lien =' https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily={}&start_date={}&end_date={}&timezone=America%2FNew_York'.format(latitude,longitude,list_data_daily,start_date,end_date)
 
-            response = requests.get(lien)
-            data = response.json()
-            # convert to dataframe
-            df_daily = pd.DataFrame(data['daily'])   
-            # save to csv
-            df_daily.to_csv(self.meteoPath)
-            return df_daily 
-        else :
-            df_daily = pd.read_csv(self.meteoPath)
-            return df_daily
+        response = requests.get(lien)
+        data = response.json()
+        # convert to dataframe
+        df_daily = pd.DataFrame(data['daily'])   
+
+        # convertie la colonne sunset de 2022-06-17T20:47 en 20,78
+        df_daily['sunset'] = round(df_daily['sunset'].str[11:13].astype(int) + df_daily['sunset'].str[14:16].astype(int)/60,2)
+        # save to csv
+        df_daily.to_csv(self.meteoPath)
+        return df_daily
+        
+
+
+    def get_today_meteodata(self):
+        '''
+        Cette fonction permet de récupérer les données météo du jour.
+        '''
+        # On récupère la date de l'année passée (limite actuelle de notre abonnement à predicthq)
+        start_date = (pd.to_datetime('today') - pd.DateOffset(years=1) + pd.DateOffset(days=1) ).strftime('%Y-%m-%d')
+        end_date = pd.to_datetime('today').strftime('%Y-%m-%d')
+        # verifie si le fichier existe
+        if os.path.exists(self.meteoPath):
+            # verifie si la derniere date est la date d'aujourd'hui
+            df_meteo = pd.read_csv(self.meteoPath)
+            if pd.to_datetime('today').strftime('%Y-%m-%d') != df_meteo['time'].max() :
+                df_meteo = api_weather.get_meteodata(self,start_date, end_date)
+        else:
+           df_meteo = api_weather.get_meteodata(self,start_date, end_date)
+        return df_meteo
+    
 
 class pre_process():
     '''
@@ -183,31 +374,22 @@ class pre_process():
         return df
 
     @staticmethod 
-    def get_data(start_date, end_date,feature = ['prevision','day_0','day_1','day_2','day_3','day_4','day_5','day_6','vacance','ferie','vente_day_1','vente_day_2','vente_day_3','vente_day_4','vente_day_5','vente_day_6','vente_day_7','apparent_temperature_max','apparent_temperature_min','sunset','uv_index_max','precipitation_sum','showers_sum','rain_sum','snowfall_sum','precipitation_hours','spec_concert','spec_performing_arts','spec_conference','spec_festival','spec_expos','spec_sports'],big_chemin = 'prevision/data/'):
+    def get_data(feature = ['prevision','day_0','day_1','day_2','day_3','day_4','day_5','day_6','vacance','ferie','vente_day_1','vente_day_2','vente_day_3','vente_day_4','vente_day_5','vente_day_6','vente_day_7','apparent_temperature_max','apparent_temperature_min','sunset','uv_index_max','showers_sum','rain_sum','snowfall_sum','precipitation_hours','attendance_concerts','attendance_conferences','attendance_expos','attendance_festivals','attendance_performing_arts','attendance_sports']):
         '''
         Cette fonction permet de charger les données d'entrainement
             * Input :  (Str) Chemin vers le dossier contenant les données
             * Output : (DataFrame) Données d'entrainement
         '''
+        # On récupère la date de l'année passée (limite actuelle de notre abonnement à predicthq)
+        start_date = (pd.to_datetime('today') - pd.DateOffset(years=1) + pd.DateOffset(days=1) ).strftime('%Y-%m-%d')
+        end_date = pd.to_datetime('today').strftime('%Y-%m-%d')
         # -----------------
         # Attendance : Nombre de spectateurs prévus
         # -----------------
-        api_instance = api_predicthq() 
-        attendancePath= constante.affluencePath
-        attendanceDf = api_instance.get_features_df(start_date, end_date,attendancePath)
-        # Fichier des prévisions d'attendance
-        attendanceDf=attendanceDf[['date', 'phq_attendance_sports_sum','phq_attendance_conferences_sum','phq_attendance_expos_sum','phq_attendance_concerts_sum','phq_attendance_festivals_sum','phq_attendance_performing_arts_sum']]
-        attendanceDf = attendanceDf.rename(columns= {
-                                                    'phq_attendance_sports_sum': 'spec_sports',
-                                                    'phq_attendance_conferences_sum': 'spec_conferences',
-                                                    'phq_attendance_expos_sum': 'spec_expos',
-                                                    'phq_attendance_concerts_sum': 'spec_concerts',
-                                                    'phq_attendance_festivals_sum': 'spec_festivals',
-                                                    'phq_attendance_performing_arts_sum': 'spec_performing_arts'
-                                                    })
+        predicthq = api_predicthq()
+        attendanceDf = predicthq.get_today_df_attendance()
         # Convertie la colonne date en datetime
         attendanceDf['date']=pd.to_datetime(attendanceDf['date'], format='%Y-%m-%d')
-
         # -----------------
         # Vente : Vente du restaurant
         # -----------------
@@ -220,14 +402,9 @@ class pre_process():
         # -----------------
         # Méteo
         # -----------------
-        # Chemin vers les fichiers
-        meteoPath=constante.meteoPath
         # Fichier des prévisions météo
         api_meteo = api_weather()
-        meteoDf = api_meteo.get_meteodata(start_date, end_date)
-        meteoDf=pd.read_csv(meteoPath)
-        # Ne pas prendre en compte les 3 premiere ligne du csv
-        meteoDf = meteoDf.iloc[3:]
+        meteoDf = api_meteo.get_today_meteodata()
         # Renommer la colonne time en date
         meteoDf = meteoDf.rename(columns={'time': 'date'})
         # Convertie la colonne date en datetime
@@ -283,10 +460,6 @@ class pre_process():
 
 if __name__ == '__main__':
 
-    start_date = '2022-09-01'
-    end_date = '2023-06-01'
-    
-    api_instance = api_predicthq() 
-    attendancePath= constante.affluencePath
-    attendanceDf = api_instance.get_features_df(start_date, end_date,attendancePath)
-    
+    X,y = pre_process.get_data()
+
+    print(X.columns)
