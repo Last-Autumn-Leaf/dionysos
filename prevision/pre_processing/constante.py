@@ -144,3 +144,12 @@ CANADA_ID={
             ]
         }
 
+# Model types (RNN cells types)
+GRU = 'GRU'
+LSTM = 'LSTM'
+SimpleRNN = 'SimpleRNN'
+
+# criterion
+MSE='MSE'
+MAE='MAE'
+SMOOTH='SMOOHL1'
