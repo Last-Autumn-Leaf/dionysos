@@ -144,6 +144,13 @@ CANADA_ID={
             ]
         }
 
+ALL_FEATURES=['prevision','day_0','day_1','day_2','day_3','day_4','day_5','day_6',
+              'vacance','ferie','vente_day_1','vente_day_2','vente_day_3','vente_day_4',
+              'vente_day_5','vente_day_6','vente_day_7','apparent_temperature_max',
+              'apparent_temperature_min','sunset','uv_index_max','showers_sum','rain_sum',
+              'snowfall_sum','precipitation_hours','attendance_concerts','attendance_conferences',
+              'attendance_expos','attendance_festivals','attendance_performing_arts','attendance_sports']
+
 # Model types (RNN cells types)
 GRU = 'GRU'
 LSTM = 'LSTM'
@@ -153,3 +160,4 @@ SimpleRNN = 'SimpleRNN'
 MSE='MSE'
 MAE='MAE'
 SMOOTH='SMOOHL1'
+

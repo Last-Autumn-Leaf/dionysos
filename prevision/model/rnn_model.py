@@ -26,7 +26,7 @@ import random
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from prevision.pre_processing.constante import GRU, LSTM, SimpleRNN, SMOOTH, MSE, MAE
+from prevision.pre_processing.constante import GRU, LSTM, SimpleRNN, SMOOTH, MSE, MAE, ALL_FEATURES
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -41,14 +41,16 @@ class WindowGenerator(Dataset):
         self.Y = Y
         self.input_sequence_length = input_sequence_length
         self.output_sequence_length = output_sequence_length
+        assert (len(self.X)-self.input_sequence_length-self.output_sequence_length+1>0),\
+            f'Dataset size too small for current options\ndata:{len(self.X)}, ' \
+            f'input_sequence_length:{input_sequence_length}, output_sequence_length:{output_sequence_length}'
 
-    def __len__(self):
+    def __len__(self):# number of windows we can generate to work it must be at least 1
         return len(self.X) - self.input_sequence_length - self.output_sequence_length + 1
 
     def __getitem__(self, idx):
         # x = self.X[idx:idx + self.input_sequence_length]
-        # x=torch.cat((self.X[idx:idx + self.input_sequence_length],self.Y[idx:idx + self.input_sequence_length][:,None]),1)
-        x=self.X[idx:idx + self.input_sequence_length]
+        x=torch.cat((self.X[idx:idx + self.input_sequence_length],self.Y[idx:idx + self.input_sequence_length][:,None]),1)
         y = self.Y[
             idx + self.input_sequence_length:idx + self.input_sequence_length + self.output_sequence_length]
         return x, y
@@ -80,9 +82,6 @@ class RNN(nn.Module):
             raise Exception('Model not implemented')
 
         self.fc1 = nn.Linear(hidden_size, hidden_size)
-        #  TODO : the problem is simple and severals non-linears layers should not be needed ! (delete this after test)
-        # self.fc2 = nn.Linear(hidden_size, hidden_size)
-        # self.fc3 = nn.Linear(hidden_size, output_size)
         self.dropout_layer = nn.Dropout(dropout)
         self.sig = nn.Sigmoid()
 
@@ -122,6 +121,7 @@ class modele_rnn():
             self.verbose=verbose
             self.verbose_mod=verbose_mod
             self.lossFunction=lossFunction
+            self.verif()
 
         def getModelOptions(self):
             return {
@@ -131,6 +131,10 @@ class modele_rnn():
                 'model_type' : self.model_type
             }
 
+
+        def verif(self):
+            if self.batch_size==1 :
+                print("Current batch size is 1")
     @timeThis("Initialisation finished in :")
     def __init__(self, x, y, options=None):
         self.options = options if options else self.Options()
@@ -180,6 +184,11 @@ class modele_rnn():
         self.x_test = self.x[int(n * dataset_split):]
         self.y_test = self.y[int(n * dataset_split):]
 
+        window_size=self.options.input_sequence_length+self.options.output_sequence_length
+        assert len(self.y_train)-window_size+1>0, f"train dataset size too small for current options\n Try changing split, window size or increase the dataset size (currently:{len(self.y_train)})"
+        assert len(self.y_test)-window_size+1>0, f"test dataset size too small for current options\n Try changing split, window size or increase the dataset size (currently:{len(self.y_test)})"
+
+
     @timeThis("Training finished in ")
     def train(self, plot=False):
         model = RNN(input_size=self.input_size,
@@ -187,8 +196,8 @@ class modele_rnn():
                     **self.options.getModelOptions())
 
         criterion = self.loss_functions.get(self.options.lossFunction)
-        if criterion is None:
-            print("Unrecognized loss function")
+        assert criterion is not None,"Unrecognized loss function"
+
 
         #TODO : the ADAM string should be in a macro !
         if self.options.optimizer=='ADAM':
@@ -199,6 +208,7 @@ class modele_rnn():
 
         best_test_loss = float('inf')
         best_model_state = None
+        best_test_loss_epoch= None
 
         train_losses = []
         test_losses = []
@@ -232,13 +242,14 @@ class modele_rnn():
 
             if test_loss < best_test_loss:
                 best_test_loss = test_loss
+                best_test_loss_epoch=epoch
                 best_model_state = model.state_dict()
 
             if self.options.verbose:
                 counter = (counter + 1) % self.options.verbose_mod
                 if not counter or epoch == self.options.epochs - 1:
                     print(f"Epoch {epoch + 1}/{self.options.epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
-
+        print(f"Best Loss :{best_test_loss} at {best_test_loss_epoch}")
         if plot:
             plt.figure(figsize=(10, 6))
             plt.plot(train_losses, label='Train Loss')
@@ -268,6 +279,9 @@ class modele_rnn():
             # Convert the predicted sequence and target sequence to numpy arrays
             predicted_sequence = predicted_sequence.squeeze().numpy()
             target_sequence = y_test.numpy()
+            if len(predicted_sequence.shape)==1 :
+                predicted_sequence=predicted_sequence[None,:]
+            n_test=min(n_test,len(predicted_sequence))
             for i in range(n_test):
                 history_sequence = x_test[i, :, -1].numpy()
 
@@ -378,30 +392,31 @@ fixSeed()
 if __name__ == '__main__':
 
     parameters = {
-        "input_sequence_length": 14,
+        "input_sequence_length": 21,
         "output_sequence_length": 7,
         "model_type" : LSTM,
         "hidden_size": 32,
         "num_layers": 4,
         "output_size": 1,
         "batch_size": 32,
-        "epochs": 1000,
+        "epochs": 700,
         "learning_rate": 0.1,
         'dataset_split': 0.7,
         'optimizer':'SGD',
         'momentum' :0.9,
         'weight_decay':1e-5,
-        'lossFunction':MSE,
+        'lossFunction':SMOOTH,
         'verbose_mod':100
     }
     # TODO : try with different options but we should fix the input and output length !
     # TODO : the network might need to be deeper when we will have more values, right now the default Options value can be considered overkill
     options = modele_rnn.Options(**parameters)
+    features=[x for x in ALL_FEATURES if not x.startswith("vente_")]
 
-    X, y = pre_process.get_data()
+    X, y = pre_process.get_data(features)
 
     rnn_model = modele_rnn(X, y, options=options)
 
     # Entraînement du modèle
     model,best_model_state = rnn_model.train(plot=True)
-    rnn_model.test(model,best_model_state ,3)
+    rnn_model.test(model,best_model_state ,5)
