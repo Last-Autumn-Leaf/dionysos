@@ -68,11 +68,12 @@ class general():
             learning_rate=learning_rate,
             subsample=subsample,
             colsample_bytree=colsample_bytree,
-            objective=objective
+            objective=objective,
+            eval_metric='rmse'
         )
 
         # Entraîner le modèle en affichant la courbe d'apprentissage
-        model.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_test, y_test)], eval_metric='rmse', verbose=False)
+        model.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_test, y_test)], verbose=False)
 
         # Afficher la courbe d'apprentissage
         if plot:

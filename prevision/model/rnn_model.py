@@ -26,7 +26,7 @@ import random
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from prevision.pre_processing.constante import GRU, LSTM, SimpleRNN, SMOOTH, MSE, MAE, ALL_FEATURES
+from prevision.pre_processing.constante import GRU, LSTM, SimpleRNN, SMOOTH, MSE, MAE, ALL_FEATURES,RNN_PARAMS_LSTM
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -50,7 +50,7 @@ class WindowGenerator(Dataset):
 
     def __getitem__(self, idx):
         # x = self.X[idx:idx + self.input_sequence_length]
-        x=torch.cat((self.X[idx:idx + self.input_sequence_length],self.Y[idx:idx + self.input_sequence_length][:,None]),1)
+        x=torch.cat((self.X[idx:idx + self.input_sequence_length],(1/10000)*self.Y[idx:idx + self.input_sequence_length][:,None]),1)
         y = self.Y[
             idx + self.input_sequence_length:idx + self.input_sequence_length + self.output_sequence_length]
         return x, y
@@ -68,12 +68,13 @@ class RNN(nn.Module):
         LSTM: nn.LSTM,
         SimpleRNN: nn.RNN
     }
-    def __init__(self, input_size, model_type='LSTM', hidden_size=5, num_layers=1, output_size=1, output_sequence_length=1,dropout=0.2):
+    def __init__(self, input_size, model_type='LSTM', hidden_size=5, num_layers=1, output_size=1, output_sequence_length=1,input_sequence_length=1,dropout=0.2):
         super().__init__()
 
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.output_sequence_length = output_sequence_length
+        self.input_sequence_length=input_sequence_length
 
         if model_type in self.model_types :
             self.rnn_layer = self.model_types[model_type](input_size=input_size, hidden_size=hidden_size,
@@ -81,13 +82,14 @@ class RNN(nn.Module):
         else:
             raise Exception('Model not implemented')
 
-        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc1 = nn.Linear(hidden_size*input_sequence_length, output_sequence_length)
         self.dropout_layer = nn.Dropout(dropout)
         self.sig = nn.Sigmoid()
 
     def forward(self, x, h=None):
+        bsize=x.size(0)
         x, h = self.rnn_layer(x, h)
-        out = self.fc1(x)
+        out = self.fc1(x.reshape((bsize,self.hidden_size*self.input_sequence_length)))[:,:,None]
         return out[:, -self.output_sequence_length:, :] if self.output_size != 1 else out[:, -self.output_sequence_length:, 0]
 
 class modele_rnn():
@@ -128,6 +130,7 @@ class modele_rnn():
                 'hidden_size': self.hidden_size,
                 'num_layers': self.num_layers,
                 'output_sequence_length': self.output_sequence_length,
+                'input_sequence_length':self.input_sequence_length,
                 'model_type' : self.model_type
             }
 
@@ -143,7 +146,7 @@ class modele_rnn():
         if len(self.x.shape)==1 : self.x=self.x[:,None]
         self.y = torch.tensor(y.to_numpy(dtype=float)).float()
         # self.x = torch.tensor(MinMaxScaler().fit_transform(self.x))
-        self.custom_transform()
+        self.setupTransformParams()
         self.split_dataset()
 
         train_dataset = WindowGenerator(self.x_train, self.y_train, self.options.input_sequence_length,
@@ -156,7 +159,7 @@ class modele_rnn():
         self.train_loader = DataLoader(train_dataset, batch_size=self.options.batch_size, shuffle=True)
         self.test_loader = DataLoader(test_dataset, batch_size=self.options.batch_size, shuffle=True)
 
-    def custom_transform(self):
+    def setupTransformParams(self):
         # TODO : try using mean and std instead of max and min
         try :
             ncols=self.x.size(1)
@@ -166,14 +169,19 @@ class modele_rnn():
                 maxV=self.x[:,i].max()
                 minV=self.x[:,i].min()
                 if maxV !=1 :
-                    self.x[:,i]=(self.x[:,i]-minV)/maxV
+                    # self.x[:,i]=(self.x[:,i]-minV)/maxV
+                    self.transform_params[i]=(maxV,minV)
                 else :
                     one_hot.add(i)
-                self.transform_params[i]={'max':maxV,'min':minV}
+            self.Y_index=ncols+1
             print('tensors', one_hot, 'found as one-hot encoded')
-            self.y/=10000
         except  :
             print('no scaling done')
+
+    def saved_transform(self,X,Y=None):
+        for i,(maxV,minV) in self.transform_params.items():
+            X[:,:, i] = (X[:, :,i] - minV) / maxV
+        return X,Y/10000
 
 
     def split_dataset(self):
@@ -218,6 +226,7 @@ class modele_rnn():
             train_loss = 0.0
             for x, y in self.train_loader:
                 optimizer.zero_grad()
+                x,y=self.saved_transform(x,y)
                 outputs = model(x)
                 loss = criterion(outputs, y)
                 loss.backward()
@@ -233,6 +242,7 @@ class modele_rnn():
 
             with torch.no_grad():
                 for x, y in self.test_loader:
+                    x, y = self.saved_transform(x, y)
                     outputs = model(x)
                     loss = criterion(outputs, y)
                     test_loss += loss.item()
@@ -275,6 +285,7 @@ class modele_rnn():
             x_test, y_test = next(iter(self.train_loader if overfiting else self.test_loader))
 
             # Forward pass through the model
+            x_test, y_test = self.saved_transform(x_test, y_test)
             predicted_sequence = model(x_test)
             # Convert the predicted sequence and target sequence to numpy arrays
             predicted_sequence = predicted_sequence.squeeze().numpy()
@@ -297,6 +308,30 @@ class modele_rnn():
                 plt.title('Sequence and Predicted Sequence')
                 plt.legend()
                 plt.show()
+
+
+    def compare(self,X,Y,model,best_model_state=None):
+        if best_model_state:
+            model.load_state_dict(best_model_state)
+        model.eval()
+        with torch.no_grad():
+            X = torch.tensor(X.to_numpy(dtype=float)).float()
+            if len(X.shape) == 1: X = X[:, None]
+            Y = torch.tensor(Y.to_numpy(dtype=float)).float()
+
+            test_dataset = WindowGenerator(X,Y, self.options.input_sequence_length,
+                                           self.options.output_sequence_length)
+            res=[]
+            for i in range(len(test_dataset)):
+                x_test, y_test=test_dataset[i]
+                x_test, y_test = self.saved_transform(x_test[None,:], y_test[None,:])
+                predicted_sequence = model(x_test)
+                predicted_sequence = predicted_sequence.squeeze().numpy() *10000
+                target_sequence = y_test.numpy()*10000
+                res.append([predicted_sequence,target_sequence[0]])
+            return np.array(res),test_dataset
+
+
 
 
     # @staticmethod
@@ -391,23 +426,9 @@ def fixSeed(seed=1999):
 fixSeed()
 if __name__ == '__main__':
 
-    parameters = {
-        "input_sequence_length": 21,
-        "output_sequence_length": 7,
-        "model_type" : LSTM,
-        "hidden_size": 32,
-        "num_layers": 4,
-        "output_size": 1,
-        "batch_size": 32,
-        "epochs": 700,
-        "learning_rate": 0.1,
-        'dataset_split': 0.7,
-        'optimizer':'SGD',
-        'momentum' :0.9,
-        'weight_decay':1e-5,
-        'lossFunction':SMOOTH,
-        'verbose_mod':100
-    }
+    parameters = RNN_PARAMS_LSTM
+    parameters['epochs']=100
+    parameters['input_sequence_length']=5
     # TODO : try with different options but we should fix the input and output length !
     # TODO : the network might need to be deeper when we will have more values, right now the default Options value can be considered overkill
     options = modele_rnn.Options(**parameters)
@@ -419,4 +440,6 @@ if __name__ == '__main__':
 
     # Entraînement du modèle
     model,best_model_state = rnn_model.train(plot=True)
+    torch.save(best_model_state, 'results/rnn.pkl')
     rnn_model.test(model,best_model_state ,5)
+    rnn_model.compare(X[:20],y[:20],model)

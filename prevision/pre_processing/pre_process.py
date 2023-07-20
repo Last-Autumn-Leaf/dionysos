@@ -377,7 +377,7 @@ class pre_process():
         df.drop(columns=keys_to_remove, inplace=True)
         return df
 
-    # TODO : Default feature should be in a macro
+
     @staticmethod 
     def get_data(feature = constante.ALL_FEATURES):
         '''
@@ -453,9 +453,9 @@ class pre_process():
         return X, y
     
     @staticmethod 
-    def split(X, y,random_state = 7):
+    def split(X, y,test_size=0.2,random_state = 7,shuffle=True):
         # segmente les données d'entrainement et de validation
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2,random_state=random_state)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size,random_state=random_state,shuffle=shuffle)
         prevision_cage = X_test['prevision'].tolist()
         # Supprimer la colonne prevision
         X_train = X_train.drop(['prevision'], axis=1)
