@@ -1,33 +1,35 @@
-version: '3'
+version: "3"
+
 services:
   influxdb:
-    image: dionysas/influxdb:latest
-    container_name: influxdb
-    ports:
-      - "8086:8086"
-    networks:
-      - monitoring
+    image: influxdb:latest
     volumes:
-      - influxdb_data:/var/lib/influxdb  # Mount the volume for InfluxDB data
-
-  grafana:
-    image: dionysas/grafana:latest
-    container_name: grafana
+      - influxdb-storage:/var/lib/influxdb2:rw
+    env_file:
+      - .env
+    entrypoint: [ "./entrypoint.sh" ]
+    restart: on-failure:10
     ports:
-      - "3000:3000"
-    networks:
-      - monitoring
+      - ${DOCKER_INFLUXDB_INIT_PORT}:8086
+
+  telegraf:
+    image: telegraf:1.19
+    volumes:
+      - ${TELEGRAF_CFG_PATH}:/etc/telegraf/telegraf.conf:rw
+    env_file:
+      - .env
     depends_on:
       - influxdb
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"  # Allow anonymous access to Grafana
-    volumes:
-      - grafana_data:/var/lib/grafana
 
-networks:
-  monitoring:
-    driver: bridge
+  grafana:
+    image: grafana/grafana-oss:latest
+    volumes:
+      - grafana-storage:/var/lib/grafana:rw
+    depends_on:
+      - influxdb
+    ports:
+      - ${GRAFANA_PORT}:3000
 
 volumes:
-  influxdb_data:
-  grafana_data:
+  grafana-storage:
+  influxdb-storage:

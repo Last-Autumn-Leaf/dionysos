@@ -1,0 +1,38 @@
+version: '3'
+services:
+  influxdb:
+    image: dionysas/influxdb:latest
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    networks:
+      - monitoring
+    volumes:
+      - influxdb_data:/var/lib/influxdb  # Mount the volume for InfluxDB data
+
+  grafana:
+    image: dionysas/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring
+    depends_on:
+      - influxdb
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"  # Allow anonymous access to Grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      -
+  code:
+    image: dionysas/code:tag # Replace with the image name and tag you want to use
+    volumes:
+      - code:/app
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  influxdb_data:
+  grafana_data:
+  code:
