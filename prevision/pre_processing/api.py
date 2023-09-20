@@ -1,5 +1,5 @@
 import requests
-from .utils import ACCESS_TOKEN_PREDICT_HQ, affluencePath, ATTENDANCE_BASE_CAT, ST_CATH_LOC, meteoPath
+from .utils import ACCESS_TOKEN_PREDICT_HQ, affluencePath, ATTENDANCE_BASE_CAT, ST_CATH_LOC, meteoPath, LA_SALLE
 import pandas as pd
 
 
@@ -13,7 +13,7 @@ class api_predicthq():
         self.access_token_PHQ = token
         # constantes
         self.selected_cat = ATTENDANCE_BASE_CAT
-        self.lieu = ST_CATH_LOC
+        self.lieu = LA_SALLE
         self.attendancePath = affluencePath
 
     def get_id_place(self, address):

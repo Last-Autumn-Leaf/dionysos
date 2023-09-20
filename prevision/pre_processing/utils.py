@@ -81,6 +81,12 @@ ST_CATH_LOC = {
     "radius": '0.5km'
 }
 
+LA_SALLE = {
+    "lon": -73.6123496,
+    "lat": 45.4469922,
+    "radius": '1mi'
+}
+
 MONTREAL_TZ = 'Canada/Eastern'
 
 MTL_ID = {

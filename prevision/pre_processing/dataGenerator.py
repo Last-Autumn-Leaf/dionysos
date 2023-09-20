@@ -97,19 +97,7 @@ def get_all_data():
     # Réinitialiser les indices
     df = df.reset_index(drop=True)
 
-    # Jours de la semaine
-    # On ajoute une colonne date
-    df['day'] = df['date'].apply(date2day)
-    # hot encode day
-    df = pd.get_dummies(df, columns=['day'])
-
-    # Vacances
-    # On ajoute une colonne
-    df['vacance'] = df['date'].apply(date2vacances)
-
-    # Jours fériés
-    # On ajoute une colonne
-    df['ferie'] = df['date'].apply(date2jourferie)
+    df = addDates(df)
 
     #
     # # Ventes des 7 derniers jours
@@ -125,6 +113,22 @@ def get_all_data():
     Y = df['vente']
     return X, Y
 
+
+def addDates(df):
+    # Jours de la semaine
+    # On ajoute une colonne date
+    df['day'] = df['date'].apply(date2day)
+    # hot encode day
+    df = pd.get_dummies(df, columns=['day'])
+
+    # Vacances
+    # On ajoute une colonne
+    df['vacance'] = df['date'].apply(date2vacances)
+
+    # Jours fériés
+    # On ajoute une colonne
+    df['ferie'] = df['date'].apply(date2jourferie)
+    return df
 
 def get_data_filtered_data(features=ALL_FEATURES):
     X, Y = get_all_data()
