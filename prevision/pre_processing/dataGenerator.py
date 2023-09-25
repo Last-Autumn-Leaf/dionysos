@@ -1,7 +1,7 @@
 from .api import api_predicthq, api_weather
 from datetime import datetime
 import pandas as pd
-from .utils import jours_feries, vacances, ALL_FEATURES, dataVentePath
+from .utils import jours_feries, vacances, ALL_FEATURES, dataVentePath, mma_path, nba_path, nfl_path, nhl_path
 
 
 def date2day(date_object):
@@ -128,6 +128,27 @@ def addDates(df):
     # Jours fériés
     # On ajoute une colonne
     df['ferie'] = df['date'].apply(date2jourferie)
+    return df
+
+def addSportBroadcast(df):
+
+    csv_files = [
+        (mma_path, 'match_mma'),
+        (nba_path, 'match_nba'),
+        (nfl_path, 'match_nfl'),
+        (nhl_path, 'match_nhl')
+    ]
+
+    for file_info in csv_files:
+        file_name, column_name = file_info
+        schedule = pd.read_csv(file_name, sep=',')
+        schedule['date'] = pd.to_datetime(schedule['date'], format='%Y-%m-%d')
+        schedule = schedule.rename(columns={'Match': column_name})
+        df = pd.merge(df, schedule, on='date', how='left')
+
+    # Remplacez les valeurs NaN par 0
+    df = df.fillna(0)
+
     return df
 
 def get_data_filtered_data(features=ALL_FEATURES):

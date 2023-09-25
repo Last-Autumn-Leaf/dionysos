@@ -8,6 +8,10 @@ dataDir = project_dir / 'prevision' / 'data'
 affluencePath = dataDir / "affluence.csv"
 dataVentePath = dataDir / "data_vente.csv"
 meteoPath = dataDir / "meteo.csv"
+mma_path = dataDir / "mma_schedule_day.csv"
+nba_path = dataDir / "nba_schedule_day.csv"
+nfl_path = dataDir / "nfl_schedule.csv"
+nhl_path = dataDir / "nhl_mtl_schedule_day.csv"
 
 # Variables à utiliser pour l'Api de prévision d'attendance PredictHQ
 ATTENDANCE_BASE_CAT = [
