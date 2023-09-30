@@ -1,8 +1,9 @@
 from ..utils import setProjectpath
+import numpy as np
 
 # MODEL TYPES
 RNN_TYPE = 'RNN'
-XGBOOST_TYPE = "XGBOOST"
+XGBOOST_TYPE = "Xgboost"
 
 # RNN cells types
 GRU = 'GRU'
@@ -36,8 +37,8 @@ RNN_PARAMS_LSTM = {
         'verbose_mod': 100
 }
 DEFAULT_OPTIONS = {
-        RNN_TYPE: RNN_PARAMS_LSTM,
-        XGBOOST_TYPE: ...
+    RNN_TYPE: RNN_PARAMS_LSTM,
+    XGBOOST_TYPE: ...
 }
 
 # File path
@@ -45,3 +46,6 @@ project_dir = setProjectpath()
 resultsDir = project_dir / 'prevision' / 'results'
 RnnDir = resultsDir / RNN_TYPE
 XGBoostDir = resultsDir / XGBOOST_TYPE
+
+mse = lambda A, B, ax=None: (np.square(A - B)).mean(axis=ax)
+mae = lambda A, B: np.abs(A - B).mean()

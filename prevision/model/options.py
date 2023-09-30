@@ -9,7 +9,7 @@ class Options:
 
                  cell_type='LSTM', input_size=25, output_size=1, input_sequence_length=10, output_sequence_length=5,
                  dataset_split=0.7,
-                 targetFeatures=ALL_FEATURES, shuffle=False,
+                 targetFeatures=None, shuffle=False,
 
                  hidden_size=128, num_layers=2, batch_size=64, epochs=50, optimizer='ADAM', momentum=0.9,
                  weight_decay=1e-5,

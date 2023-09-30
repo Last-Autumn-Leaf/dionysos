@@ -1,4 +1,4 @@
-from .dataGenerator import get_all_data, get_data_filtered_data, addDates, addSportBroadcast
+from .DataGenerator import get_all_data, get_data_filtered_data, getAllDataFromCSV, addDates, addSportBroadcast
 from .. import timeThis
 
 import torch
@@ -44,6 +44,10 @@ class DataLoader():
 
     @timeThis("Data set in : ")
     def setData(self, X, Y):
+        Xshape = X.shape
+        if len(Xshape) == 2:
+            assert Xshape[1] + 1 == self.options.input_size, f"Input size is calulated to be " \
+                                                             f"{Xshape[1] + 1} but is set to {self.options.input_size}"
         self.X = X.to_numpy(dtype='float64')
         self.Y = Y.to_numpy(dtype='float64')
 

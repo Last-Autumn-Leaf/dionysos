@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from sklearn.base import BaseEstimator
+
 from .utils import GRU, LSTM, SimpleRNN
 
 

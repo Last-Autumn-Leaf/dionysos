@@ -1,7 +1,9 @@
+from sklearn.model_selection import RandomizedSearchCV
+
 from .utils import XGBOOST_TYPE, RNN_TYPE, DEFAULT_OPTIONS, MAE, MSE, SMOOTH, ADAM, SGD, resultsDir
 from .options import Options
 from .rnn import RNN
-from .xgboost import XGBOOST
+from .xgboost import Xgboost
 
 from .. import timeThis
 import torch
@@ -13,7 +15,7 @@ import pickle
 class Model():
     modeltype2model = {
         RNN_TYPE: RNN,
-        XGBOOST_TYPE: XGBOOST
+        XGBOOST_TYPE: Xgboost
     }
     loss_functions = {
         MSE: torch.nn.MSELoss(),
@@ -187,11 +189,11 @@ class Model():
 
         for i in range(n_train):
             x, y = dataLoader.train_dataset[i]
-            X_train[i] = x.flatten()
+            X_train[i] = x.t().flatten()
             Y_train[i] = y
         for i in range(n_test):
             x, y = dataLoader.test_dataset[i]
-            X_test[i] = x.flatten()
+            X_test[i] = x.t().flatten()
             Y_test[i] = y
         return X_train, Y_train, X_test, Y_test
 
@@ -252,14 +254,34 @@ class Model():
         x_test = x_test.reshape((16, self.options.input_sequence_length, self.options.input_size))
         return x_test, y_test, predicted_sequence
 
+    def fineTuneXGBoostRandomSearch(self, dataLoader, param_distributions, n_iter=100, cv=3):
+        X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
+        eval_results, res = self.model.fineTune(X_train, Y_train, X_test, Y_test, param_distributions, n_iter, cv,
+                                                self.options.verbose)
+        plot_eval_result_XGBOOST(eval_results)
+        show_test(X_test, Y_test, res, self.options.input_sequence_length, self.options.output_sequence_length)
 
-def saveModel(obj):
+        # TODO : handle the saving of the models
+        saveModel(self)
+
+    def fineTuneRnn(self, dataLoader, param_distributions=None, n_iter=10):
+        X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
+        eval_results, res = self.model.rayTune(X_train, Y_train, X_test, Y_test, param_distributions, n_iter)
+        plot_eval_result_XGBOOST(eval_results)
+        show_test(X_test, Y_test, res, self.options.input_sequence_length, self.options.output_sequence_length)
+
+        # TODO : handle the saving of the models
+        saveModel(self)
+
+
+# --------- saving and loading models
+def saveModel(obj, suffix=''):
     modelType = obj.options.model_type
     dir = resultsDir / modelType / "saves"
     if not dir.exists():
         dir.mkdir(parents=True)
     files_list = list(dir.glob('*'))
-    filename = dir / f"{modelType}_{len(files_list)}.pkl"
+    filename = dir / f"{modelType}_{len(files_list)}{suffix if suffix else ''}.pkl"
     with open(filename, "wb") as file:
         pickle.dump(obj, file)
     print(f"file saved at {filename}")
@@ -269,3 +291,38 @@ def loadModel(filename):
     with open(filename, "rb") as file:
         obj = pickle.load(file)
     return obj
+
+
+# ----------- Visualization
+def plot_eval_result_XGBOOST(eval_results):
+    # Extract training and validation losses
+    train_loss = eval_results['validation_0']['rmse']
+    val_loss = eval_results['validation_1']['rmse']
+
+    # Plot the loss
+    epochs = len(train_loss)
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, epochs + 1), train_loss, label='Train Loss')
+    plt.plot(range(1, epochs + 1), val_loss, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('RMSE')
+    plt.title('Training and Validation Loss')
+    plt.legend()
+    plt.show()
+
+
+def show_test(X_test, Y_test, res, input_sequence_length, output_sequence_length, ntest=3):
+    for i in range(ntest):
+        history_sequence = X_test[i][-input_sequence_length:]
+        target_sequence = Y_test[i]
+        predicted_sequence = res[i]
+        plt.plot(range(input_sequence_length + output_sequence_length),
+                 np.concatenate((history_sequence, target_sequence)), label='True sequence',
+                 linestyle="-", marker="o")
+        plt.plot(range(input_sequence_length, input_sequence_length + output_sequence_length),
+                 predicted_sequence, linestyle="-", marker="o", label='Predicted sequence')
+        plt.legend()
+        plt.title(f'Sequence and Predicted Sequence n°{i}')
+        plt.xlabel('Time Step')
+        plt.ylabel('Value')
+        plt.show()
