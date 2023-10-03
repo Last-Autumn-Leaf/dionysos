@@ -264,9 +264,10 @@ class Model():
         # TODO : handle the saving of the models
         saveModel(self)
 
-    def fineTuneRnn(self, dataLoader, param_distributions=None, n_iter=10):
+    def fineTuneXGBoostRay(self, dataLoader, param_distributions=None, n_iter=10, scoring='rmse', eval_metric="rmse"):
         X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
-        eval_results, res = self.model.rayTune(X_train, Y_train, X_test, Y_test, param_distributions, n_iter)
+        eval_results, res = self.model.rayTune(X_train, Y_train, X_test, Y_test, param_distributions, n_iter, scoring,
+                                               eval_metric)
         plot_eval_result_XGBOOST(eval_results)
         show_test(X_test, Y_test, res, self.options.input_sequence_length, self.options.output_sequence_length)
 
@@ -296,8 +297,15 @@ def loadModel(filename):
 # ----------- Visualization
 def plot_eval_result_XGBOOST(eval_results):
     # Extract training and validation losses
-    train_loss = eval_results['validation_0']['rmse']
-    val_loss = eval_results['validation_1']['rmse']
+    if 'rmse' in eval_results['validation_0']:
+        train_loss = eval_results['validation_0']['rmse']
+        val_loss = eval_results['validation_1']['rmse']
+    elif 'mae' in eval_results['validation_0']:
+        train_loss = eval_results['validation_0']['mae']
+        val_loss = eval_results['validation_1']['mae']
+    else:
+        raise ValueError(
+            f"mae and RMSE not found in the eval metric of the model, found {eval_results['validation_0'].keys()}")
 
     # Plot the loss
     epochs = len(train_loss)

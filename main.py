@@ -14,4 +14,4 @@ if __name__ == '__main__':
 
     a = Model(options)
     b = DataLoader(options)
-    a.fineTuneRnn(b, None, 100)
+    a.fineTuneXGBoostRay(b, None, 100)

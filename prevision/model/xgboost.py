@@ -13,7 +13,7 @@ class Xgboost:
     # O(k*n_iter*cv)
     def fineTune(self, X_train, Y_train, X_test, Y_test, param_distributions, n_iter=100, cv=3, verbose=False):
         random_search = RandomizedSearchCV(self.model, param_distributions,
-                                           n_iter=n_iter, scoring='neg_root_mean_squared_error', cv=cv,
+                                           n_iter=n_iter, scoring='neg_rmse', cv=cv,
                                            random_state=42, verbose=verbose, n_jobs=-1)
         random_search.fit(X_train, Y_train)
         best_model = random_search.best_estimator_
@@ -40,14 +40,13 @@ class Xgboost:
         res = best_model.predict(X_test)
         return eval_results, res
 
-    def rayTune(self, X_train, Y_train, X_test, Y_test, search_space=None, n_iter=100):
-        metric = "root_mean_squared_error"
-
-        # TODO : It is possible to use two metrics liek rmse and mae
+    def rayTune(self, X_train, Y_train, X_test, Y_test, search_space=None, n_iter=100, scoring="rmse",
+                eval_metric="rmse"):
+        # TODO : It is possible to use two metrics like rmse and mae
         def train_xgboost(config):
             params = {
                 "objective": "reg:squarederror",
-                "eval_metric": "rmse",
+                "eval_metric": eval_metric,
                 "max_depth": config["max_depth"],
                 "subsample": config["subsample"],
                 "learning_rate": config["learning_rate"],
@@ -58,7 +57,10 @@ class Xgboost:
             model.fit(X_train, Y_train)
             y_pred = model.predict(X_test)
             rmse_val = float(np.sqrt(mse(Y_test, y_pred)))
-            train.report({"root_mean_squared_error": rmse_val, "model": model})
+            mae_val = float(mae(Y_test, y_pred))
+            train.report({"rmse": rmse_val,
+                          "mae": mae_val,
+                          "model": model})
 
         if not search_space:
             search_space = {
@@ -72,7 +74,7 @@ class Xgboost:
             train_xgboost,
             config=search_space,
             num_samples=n_iter,
-            metric=metric,
+            metric=scoring,
             mode="min",
             verbose=False
         )
@@ -80,8 +82,10 @@ class Xgboost:
         best_result = analysis.best_result
         best_model = best_result['model']
         best_hyperparameters = best_result["config"]
-        best_score = best_result[metric]
-        print(f"Best {metric}:", best_score)
+        best_mae = best_result['mae']
+        best_rmse = best_result['rmse']
+        print(f"Best MAE validation:", best_mae)
+        print(f"Best RMSE validation:", best_rmse)
         print("Best hyperparameters:", best_hyperparameters)
 
         best_model.fit(X_train, Y_train,
