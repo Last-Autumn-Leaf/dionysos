@@ -5,7 +5,7 @@ from ..pre_processing import ALL_FEATURES
 class Options:
 
     def __init__(self,
-                 model_type='RNN', learning_rate=0.01, lossFunction='MSE',
+                 model_type=RNN_TYPE, learning_rate=0.01, lossFunction='MSE',
 
                  cell_type='LSTM', input_size=25, output_size=1, input_sequence_length=10, output_sequence_length=5,
                  dataset_split=0.7,
@@ -96,3 +96,7 @@ class Options:
     def verif(self):
         if self.batch_size == 1:
             print("Current batch size is 1")
+
+    def getXDimension(self):
+        return self.input_sequence_length * self.input_size if self.model_type == XGBOOST_TYPE else (
+            self.input_size, self.input_sequence_length)

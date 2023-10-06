@@ -40,6 +40,9 @@ class RNN(nn.Module):
         return out[:, -self.output_sequence_length:, :] if self.output_size != 1 else out[:,
                                                                                       -self.output_sequence_length:, 0]
 
+    def featureImportance(self, features_names, feature_threshold=0.001):
+        print("Not implemented yet for the RNN")
+
 
 if __name__ == '__main__':
 

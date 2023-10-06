@@ -35,6 +35,13 @@ class WindowGenerator(Dataset):
 
 class DataLoader():
     def __init__(self, options):
+        self.X = None
+        self.Y = None
+        self.train_dataset = None
+        self.test_dataset = None
+        self.test_loader = None
+        self.train_loader = None
+        self.featuresNames = None
         self.options = options
         X, Y = get_all_data() if options.targetFeatures is None else get_data_filtered_data(options.targetFeatures)
         self.setData(X, Y)
@@ -44,10 +51,13 @@ class DataLoader():
 
     @timeThis("Data set in : ")
     def setData(self, X, Y):
-        Xshape = X.shape
-        if len(Xshape) == 2:
-            assert Xshape[1] + 1 == self.options.input_size, f"Input size is calulated to be " \
-                                                             f"{Xshape[1] + 1} but is set to {self.options.input_size}"
+        xShape = X.shape
+        yShape = Y.shape
+        if len(xShape) == 2:
+            assert xShape[1] + 1 == self.options.input_size, f"Input size is calulated to be " \
+                                                             f"{xShape[1] + 1} but is set to {self.options.input_size}"
+        self.featuresNames = list(X.columns) + list(Y.columns) if len(yShape) == 2 else list(X.columns) + [
+            'ventes passées']
         self.X = X.to_numpy(dtype='float64')
         self.Y = Y.to_numpy(dtype='float64')
 
@@ -84,5 +94,11 @@ class DataLoader():
 
     def getData(self):
         return self.X, self.Y
+
+    def getXDimension(self):
+        return self.options.getXDimension()
+
+    def getFeatureNames(self):
+        return self.featuresNames
 
     # TODO create a DB using training data but more importantly TEST DATA

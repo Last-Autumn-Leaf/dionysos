@@ -274,6 +274,45 @@ class Model():
         # TODO : handle the saving of the models
         saveModel(self)
 
+    def featureImportance(self, features_names, feature_threshold=0.001):
+        """
+            Calcule et affiche l'importance des fonctionnalités du modèle.
+
+            Arguments:
+            - features_names : Le nom des features envoyés en input au model
+            - feature_threshold : Si le score est >=feature_threshold il est affiché. Doit appartenir à [0;1].
+            """
+
+        if self.options.model_type == XGBOOST_TYPE:
+            importance = self.model.getModelFeaturesImportance()
+            input_size, input_sequence_length = self.options.input_size, self.options.input_sequence_length
+
+            assert input_size * input_sequence_length == len(importance), f"Feature size calulated to be " \
+                                                                          f"{input_size * input_sequence_length} but found {len(importance)}"
+            reshaped_features = np.reshape(importance, (input_size, input_sequence_length))
+            features_scores = np.sum(reshaped_features, axis=1)
+            assert len(features_names) == len(features_scores), f"The number of feature names {len(features_names)}" \
+                                                                f" doesn't match the number of features scored {features_scores}"
+
+        # TODO elif RNN
+        else:
+            print(f"Feature importance not implemented for model type {self.options.model_type}")
+
+        assert 0 <= feature_threshold <= 1, f"feature_threshold must be between 0 and 1, found {feature_threshold}"
+        filter_indexes = [index for index, value in enumerate(features_scores) if value >= feature_threshold]
+
+        features_scores = [features_scores[i] for i in filter_indexes]
+        features_names = [features_names[i] for i in filter_indexes]
+        # indices = np.argsort(importances)
+        n_features = len(features_scores)
+
+        plt.figure()
+        plt.title("Feature importances")
+        plt.barh(range(n_features), features_scores, align="center")
+        plt.yticks(range(n_features), features_names)
+        plt.ylim([-1, n_features])
+        plt.show()
+
 
 # --------- saving and loading models
 def saveModel(obj, suffix=''):

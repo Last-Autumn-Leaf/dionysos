@@ -3,8 +3,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from .utils import mse, mae, np
 import ray
 from ray import train, tune
-from ray.tune import grid_search
-
+import matplotlib.pyplot as plt
 
 class Xgboost:
     def __init__(self, **modelOptions):
@@ -95,3 +94,6 @@ class Xgboost:
         res = best_model.predict(X_test)
         self.model = best_model
         return eval_results, res
+
+    def getModelFeaturesImportance(self):
+        return self.model.feature_importances_
