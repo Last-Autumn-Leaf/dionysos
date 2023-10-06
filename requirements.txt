@@ -1,3 +1,4 @@
+absl-py==1.4.0
 aiofiles==23.1.0
 aiohttp==3.8.5
 aiosignal==1.3.1
@@ -45,6 +46,7 @@ huggingface-hub==0.16.4
 idna==3.4
 importlib-metadata==6.6.0
 importlib-resources==5.12.0
+influxdb-client==1.37.0
 ipykernel==6.23.1
 ipython==8.13.2
 ipython-genutils==0.2.0
@@ -74,6 +76,7 @@ mdit-py-plugins==0.3.3
 mdurl==0.1.2
 mistune==2.0.5
 mpmath==1.3.0
+msgpack==1.0.5
 multidict==6.0.4
 nbclassic==1.0.0
 nbclient==0.8.0
@@ -85,6 +88,7 @@ notebook==6.5.4
 notebook_shim==0.2.3
 numpy==1.24.3
 orjson==3.9.2
+ortools==9.7.2996
 outcome==1.2.0
 overrides==7.3.1
 packaging==23.1
@@ -99,9 +103,11 @@ platformdirs==3.5.1
 predicthq==2.3.0
 prometheus-client==0.17.0
 prompt-toolkit==3.0.38
+protobuf==4.24.3
 psutil==5.9.5
 ptyprocess==0.7.0
 pure-eval==0.2.2
+pyarrow==12.0.1
 pycparser==2.21
 pydantic==2.0.3
 pydantic_core==2.3.0
@@ -119,6 +125,7 @@ PyYAML==6.0
 pyzmq==25.1.0
 qtconsole==5.4.3
 QtPy==2.3.1
+ray==2.7.0
 reactivex==4.0.4
 requests==2.31.0
 rfc3339-validator==0.1.4
