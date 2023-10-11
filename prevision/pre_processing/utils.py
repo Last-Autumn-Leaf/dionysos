@@ -8,6 +8,7 @@ dataDir = project_dir / 'prevision' / 'data'
 affluencePath = dataDir / "affluence.csv"
 dataVentePath = dataDir / "data_vente.csv"
 dailySalesPath = dataDir / "daily_sales.csv"
+hourlySalesPath = dataDir / "vente_hours.csv"
 meteoPath = dataDir / "meteo.csv"
 mma_path = dataDir / "mma_schedule_day.csv"
 nba_path = dataDir / "nba_schedule_day.csv"

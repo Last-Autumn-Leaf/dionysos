@@ -43,7 +43,8 @@ class DataLoader():
         self.train_loader = None
         self.featuresNames = None
         self.options = options
-        X, Y = get_all_data() if options.targetFeatures is None else get_data_filtered_data(options.targetFeatures)
+        X, Y = get_all_data(hourly=options.hourly) if options.targetFeatures is None else \
+            get_data_filtered_data(options.targetFeatures, hourly=options.hourly)
         self.setData(X, Y)
 
     def getData(self):

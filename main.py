@@ -1,4 +1,4 @@
-from prevision import Options, Model, DataLoader, XGBOOST_TYPE, getAllDataFromCSV
+from prevision import Options, Model, DataLoader, XGBOOST_TYPE, getAllDataFromCSV, RNN_TYPE
 import numpy as np
 
 if __name__ == '__main__':
@@ -10,8 +10,11 @@ if __name__ == '__main__':
         'colsample_bytree': np.arange(0.7, 1.0, 0.1),  # Subsample ratio of columns
     }
     options = Options(model_type=XGBOOST_TYPE, input_sequence_length=14,
-                      output_sequence_length=7, verbose_mod=100, input_size=28)
+                      output_sequence_length=7, verbose_mod=100, input_size=28
+                      , verbose=0)
 
     a = Model(options)
     b = DataLoader(options)
-    a.fineTuneXGBoostRay(b, None, 100)
+    # a.train(b,1,1)
+    # a.fineTuneXGBoostRay(b, None, 100)
+    a.rollForwardXGBoost(b)

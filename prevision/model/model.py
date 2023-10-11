@@ -1,8 +1,8 @@
 from sklearn.model_selection import RandomizedSearchCV
 
-from .utils import XGBOOST_TYPE, RNN_TYPE, DEFAULT_OPTIONS, MAE, MSE, SMOOTH, ADAM, SGD, resultsDir
+from .utils import XGBOOST_TYPE, RNN_TYPE, DEFAULT_OPTIONS, MAE, MSE, SMOOTH, ADAM, SGD, resultsDir, mse, mae
 from .options import Options
-from .rnn import RNN
+from .rnnmodel import RnnModel
 from .xgboost import Xgboost
 
 from .. import timeThis
@@ -14,7 +14,7 @@ import pickle
 
 class Model():
     modeltype2model = {
-        RNN_TYPE: RNN,
+        RNN_TYPE: RnnModel,
         XGBOOST_TYPE: Xgboost
     }
     loss_functions = {
@@ -55,23 +55,8 @@ class Model():
         else:
             raise f"model_type non reconnu {self.options.model_type}"
 
-        target_sequence = y_test.numpy()
-        if len(predicted_sequence.shape) == 1:
-            predicted_sequence = predicted_sequence[None, :]
-        n_test = min(n, len(predicted_sequence))
-        for i in range(n_test):
-            history_sequence = x_test[i, :, -1].numpy()
-            plt.plot(range(self.options.input_sequence_length + self.options.output_sequence_length),
-                     np.concatenate((history_sequence, target_sequence[i])), label='True sequence',
-                     linestyle="-", marker="o")
-            plt.plot(range(self.options.input_sequence_length,
-                           self.options.input_sequence_length + self.options.output_sequence_length),
-                     predicted_sequence[i], linestyle="-", marker="o", label='Predicted sequence')
-            plt.xlabel('Time Step')
-            plt.ylabel('Value')
-            plt.title('Sequence and Predicted Sequence')
-            plt.legend()
-            plt.show()
+        show_test(x_test, y_test, predicted_sequence, self.options.input_sequence_length,
+                  self.options.output_sequence_length)
 
     def setTransform(self, dataLoader):
         X, Y = dataLoader.getData()
@@ -82,11 +67,12 @@ class Model():
             for i in range(ncols):
                 maxV = X[:, i].max()
                 minV = X[:, i].min()
-                if maxV != 1:
+
+                if maxV == 1 and minV == 0:
+                    one_hot.add(i)
+                elif maxV != 0:
                     # self.x[:,i]=(self.x[:,i]-minV)/maxV
                     self.transform_params[i] = (maxV, minV)
-                else:
-                    one_hot.add(i)
             print('tensors', one_hot, 'found as one-hot encoded')
 
         except:
@@ -206,6 +192,12 @@ class Model():
         model.fit(X_train, Y_train, eval_set=[(X_train, Y_train), (X_test, Y_test)],
                   verbose=self.options.verbose and self.options.verbose_mod)
 
+        val_preds = model.predict(X_test)
+        val_rmse = np.sqrt(mse(Y_test, val_preds))
+        val_mae = mae(Y_test, val_preds)
+        print('Validation RMSE:', val_rmse)
+        print('Validation MAE:', val_mae)
+
         # Afficher la courbe d'apprentissage
         if plot:
             results = model.evals_result()
@@ -242,6 +234,12 @@ class Model():
             predicted_sequence = predicted_sequence.squeeze().numpy()
         return x_test, y_test, predicted_sequence
 
+    def unflattenXGData(self, x_test):
+        unflatten_xTest = torch.zeros((x_test.shape[0], self.options.input_sequence_length, self.options.input_size))
+        for i in range(len(x_test)):
+            unflatten_xTest[i] = x_test[i].reshape((self.options.input_size, self.options.input_sequence_length)).t()
+        return unflatten_xTest
+
     def testXGBoost(self, dataLoader, overfiting=False):
 
         model = self.model.model
@@ -251,8 +249,8 @@ class Model():
 
         predicted_sequence = model.predict(x_test)
 
-        x_test = x_test.reshape((16, self.options.input_sequence_length, self.options.input_size))
-        return x_test, y_test, predicted_sequence
+        unflatten_xTest = self.unflattenXGData(x_test)
+        return unflatten_xTest, y_test, predicted_sequence
 
     def fineTuneXGBoostRandomSearch(self, dataLoader, param_distributions, n_iter=100, cv=3):
         X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
@@ -265,11 +263,13 @@ class Model():
         saveModel(self)
 
     def fineTuneXGBoostRay(self, dataLoader, param_distributions=None, n_iter=10, scoring='rmse', eval_metric="rmse"):
+        assert self.options.model_type == XGBOOST_TYPE, f"Can't use fineTuneXGBoostRay with model type={self.options.model_type}"
         X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
         eval_results, res = self.model.rayTune(X_train, Y_train, X_test, Y_test, param_distributions, n_iter, scoring,
                                                eval_metric)
         plot_eval_result_XGBOOST(eval_results)
-        show_test(X_test, Y_test, res, self.options.input_sequence_length, self.options.output_sequence_length)
+        unflatenX_test = self.unflattenXGData(X_test)
+        show_test(unflatenX_test, Y_test, res, self.options.input_sequence_length, self.options.output_sequence_length)
 
         # TODO : handle the saving of the models
         saveModel(self)
@@ -313,6 +313,61 @@ class Model():
         plt.ylim([-1, n_features])
         plt.show()
 
+    def rollForwardXGBoost(self, dataLoader):
+        # Day Forward-Chaining
+        assert self.options.model_type == XGBOOST_TYPE, f"Can't use fineTuneXGBoostRay with model type={self.options.model_type}"
+        assert not self.options.shuffle, "Dataset can't be shuffled for roll forward Partitioning"
+        X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
+        model = self.model.model
+        X = torch.concatenate((X_train, X_test))
+        Y = torch.concatenate((Y_train, Y_test))
+
+        window_size = 10  # Adjust as needed
+        step_size = 10  # Adjust as needed
+        val_size = 20
+        test_size = 20
+        drop = False
+        num_iterations = (len(X) - window_size - test_size) // step_size
+
+        res_val = []
+        res_test = []
+        for i in range(num_iterations):
+            start_index = i * step_size if drop else 0
+            end_index = start_index + window_size if drop else (start_index + (i + 1) * window_size)
+
+            # Extract features and labels
+            x_train = X[start_index:end_index]
+            y_train = Y[start_index:end_index]
+            x_val = X[end_index:end_index + val_size]
+            y_val = Y[end_index:end_index + val_size]
+            x_test = X[end_index + val_size:end_index + val_size + test_size]
+            y_test = Y[end_index + val_size:end_index + val_size + test_size]
+
+            # Train the XGBoost model
+            model.fit(x_train, y_train, eval_set=[(x_train, y_train), (x_val, y_val)],
+                      verbose=self.options.verbose and self.options.verbose_mod)
+
+            # Make predictions on the validation set
+            predictions = model.predict(x_val)
+            rmse_val = np.sqrt(mse(y_val, predictions))
+
+            predictions = model.predict(x_test)
+            rmse_test = np.sqrt(mse(y_test, predictions))
+
+            print(f"Iteration {i + 1}: training on {end_index - start_index} days -"
+                  f" RMSE validation ({val_size}days): {rmse_val:.2f},test ({test_size}days):{rmse_test:.2f} ")
+            res_val.append(rmse_val)
+            res_test.append(rmse_test)
+
+        avg_test = np.mean(res_test)
+        print("average test RMSE:", avg_test)
+        plt.plot(res_test, label="test")
+
+        avg_val = np.mean(res_val)
+        print("average val RMSE:", avg_val)
+        plt.plot(res_val, label="validation")
+        plt.legend()
+        plt.show()
 
 # --------- saving and loading models
 def saveModel(obj, suffix=''):
@@ -360,7 +415,7 @@ def plot_eval_result_XGBOOST(eval_results):
 
 def show_test(X_test, Y_test, res, input_sequence_length, output_sequence_length, ntest=3):
     for i in range(ntest):
-        history_sequence = X_test[i][-input_sequence_length:]
+        history_sequence = X_test[i, -input_sequence_length:, -1]
         target_sequence = Y_test[i]
         predicted_sequence = res[i]
         plt.plot(range(input_sequence_length + output_sequence_length),

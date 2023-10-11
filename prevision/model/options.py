@@ -7,13 +7,16 @@ class Options:
     def __init__(self,
                  model_type=RNN_TYPE, learning_rate=0.01, lossFunction='MSE',
 
-                 cell_type='LSTM', input_size=25, output_size=1, input_sequence_length=10, output_sequence_length=5,
+                 input_size=25, output_size=1, input_sequence_length=10, output_sequence_length=5,
                  dataset_split=0.7,
-                 targetFeatures=None, shuffle=False,
+                 targetFeatures=None, shuffle=False, hourly=False,
 
-                 hidden_size=128, num_layers=2, batch_size=64, epochs=50, optimizer='ADAM', momentum=0.9,
+                 # rnn options
+                 cell_type='LSTM', hidden_size=128, num_layers=2, dropout=0.2, batch_size=64, epochs=50,
+                 optimizer='ADAM', momentum=0.9,
                  weight_decay=1e-5,
 
+                 # xgboost options
                  n_estimators=500, max_depth=15, subsample=0.6, colsample_bytree=0.6, gamma=None, min_child_weight=None,
                  reg_alpha=None, reg_lambda=None, eval_metric='rmse',
                  verbose=True, verbose_mod=20,
@@ -31,12 +34,15 @@ class Options:
         self.dataset_split = dataset_split
         self.targetFeatures = targetFeatures
         self.shuffle = shuffle
+        self.hourly = hourly
 
         # RNN options
         self.cell_type = cell_type
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+        self.dropout = dropout
         self.batch_size = batch_size
+        self.output_size = output_size
         self.epochs = epochs
         self.optimizer = optimizer
         self.momentum = momentum
@@ -62,11 +68,14 @@ class Options:
     def getModelOptions(self):
         if self.model_type == RNN_TYPE:
             return {
+                'input_size': self.input_size,
+                'cell_type': self.cell_type,
                 'hidden_size': self.hidden_size,
                 'num_layers': self.num_layers,
+                'output_size': self.output_size,
                 'output_sequence_length': self.output_sequence_length,
                 'input_sequence_length': self.input_sequence_length,
-                'cell_type': self.cell_type
+                'dropout': self.dropout
             }
         elif self.model_type == XGBOOST_TYPE:
             return {
@@ -90,7 +99,9 @@ class Options:
             'output_sequence_length': self.output_sequence_length,
             'dataset_split': self.dataset_split,
             'targetFeatures': self.targetFeatures,
-            'shuffle': self.shuffle
+            'shuffle': self.shuffle,
+            'hourly': self.hourly
+
         }
 
     def verif(self):

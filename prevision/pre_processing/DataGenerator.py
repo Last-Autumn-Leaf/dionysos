@@ -1,8 +1,9 @@
 from .api import api_predicthq, api_weather
 from datetime import datetime
 import pandas as pd
+import numpy as np
 from .utils import jours_feries, vacances, ALL_FEATURES, dataVentePath, mma_path, nba_path, nfl_path, nhl_path, \
-    dailySalesPath, meteoPath, affluencePath
+    dailySalesPath, meteoPath, affluencePath, hourlySalesPath
 
 
 def date2day(date_object):
@@ -50,7 +51,35 @@ def remove_keys_not_in_list(df, feature_list):
     return df[union]
 
 
-def get_all_data():
+def getPrevSells(hourly: bool) -> (pd.DataFrame, list):
+    if hourly:
+        df_sales = pd.read_csv(hourlySalesPath).drop(['sources', 'periode', 'day'], axis=1)
+        df_sales['date_time'] = pd.to_datetime(df_sales['date_time']).dt.date
+
+        X = df_sales.values
+        listHours = ["{:02d}:{:02d}".format(hour, minute) for hour in range(24) for minute in range(0, 60, 30)]
+        steps = 24 * 2
+        ndays = len(X) // (steps)
+        newX = np.zeros((ndays, steps))
+        dt = [0] * ndays
+        for i in range(ndays):
+            dt[i] = X[i * steps, 0]
+            newX[i] = X[i * steps:steps * (i + 1), 1]
+        start_i = 23
+        encoding_h_str = 'h_'
+        col_names = [f'{encoding_h_str}{x}' for x in listHours[start_i:]]
+        prevSellsDf = pd.DataFrame(newX[:, start_i:], columns=col_names)
+        prevSellsDf['date'] = dt
+        prevSellsDf['date'] = prevSellsDf['date'].astype('datetime64[ns]')
+        prevSellsDf.set_index('date', inplace=True)
+    else:
+        col_names = ['vente']
+        prevSellsDf = pd.read_csv(dailySalesPath, parse_dates=['Date'], index_col='Date').rename_axis('date')
+
+    return prevSellsDf.dropna(), col_names
+
+
+def get_all_data(hourly=False):
     '''
     Cette fonction permet de charger les données d'entrainement
         * Input :  (Str) Chemin vers le dossier contenant les données
@@ -72,14 +101,12 @@ def get_all_data():
     # -----------------
     # Vente : Vente du restaurant
     # -----------------
-    # Todo : changement de path
     # prevSellsPath = dataVentePath
     # # Fichier des prévisions de ventes
     # prevSellsDf = pd.read_csv(prevSellsPath, sep=';')
     # # Convertie la colonne date en datetime
     # prevSellsDf['date'] = pd.to_datetime(prevSellsDf['date'], format='%d-%m-%Y')
-    prevSellsDf = pd.read_csv(dailySalesPath, parse_dates=['Date'], index_col='Date').rename_axis('date')
-    prevSellsDf.dropna()
+    prevSellsDf, col_names = getPrevSells(hourly)
 
     # -----------------
     # Méteo
@@ -105,8 +132,9 @@ def get_all_data():
     df = addDates(df)
     df = addSportBroadcast(df)
     df = df.dropna()
-    X = df.drop('vente', axis=1)
-    Y = df['vente']
+
+    X = df.drop(col_names, axis=1)
+    Y = df[col_names]
     return X, Y
 
 
@@ -126,8 +154,8 @@ def addDates(df):
     df['ferie'] = df.index.map(date2jourferie)
     return df
 
-def addSportBroadcast(df):
 
+def addSportBroadcast(df):
     csv_files = [
         (mma_path, 'match_mma'),
         (nba_path, 'match_nba'),
@@ -147,14 +175,14 @@ def addSportBroadcast(df):
     return df
 
 
-def get_data_filtered_data(features=ALL_FEATURES):
-    X, Y = get_all_data()
+def get_data_filtered_data(features=ALL_FEATURES, hourly=False):
+    X, Y = get_all_data(hourly)
     X = remove_keys_not_in_list(X, features)
     return X, Y
 
 
-def getAllDataFromCSV():
-    df_sales = pd.read_csv(dailySalesPath, parse_dates=['Date'], index_col='Date').rename_axis('date')
+def getAllDataFromCSV(hourly=False):
+    df_sales, col_names = getPrevSells(hourly)
     df_meteo = pd.read_csv(meteoPath, parse_dates=['time'], index_col='time').rename_axis('date').drop(
         'Unnamed: 0', axis=1)
     df_predictHQ = pd.read_csv(affluencePath, parse_dates=['date'], index_col='date')
@@ -163,8 +191,8 @@ def getAllDataFromCSV():
     df_all = addSportBroadcast(df_all)
 
     df = df_all.dropna()
-    X = df.drop('vente', axis=1)
-    Y = df['vente']
+    X = df.drop(col_names, axis=1)
+    Y = df[col_names]
     return df, X, Y
 
 
