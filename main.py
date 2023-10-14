@@ -10,7 +10,7 @@ if __name__ == '__main__':
     #     'colsample_bytree': np.arange(0.7, 1.0, 0.1),  # Subsample ratio of columns
     # }
 
-    hourly = True
+    hourly = False
     recursif = True
     options = Options(model_type=XGBOOST_TYPE, input_sequence_length=14,
                       output_sequence_length=1 if recursif or hourly else 7, verbose_mod=100, input_size=27

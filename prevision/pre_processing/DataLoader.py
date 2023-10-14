@@ -105,12 +105,11 @@ class DataLoader():
         self.X = X.to_numpy(dtype='float64')
         self.Y = Y.to_numpy(dtype='float64')
 
-        if self.options.fullTraining:
-            self.full_dataset = WindowGenerator(self.X, self.Y, self.options.input_sequence_length,
-                                                self.options.output_sequence_length)
-            self.full_loader = torch.utils.data.DataLoader(self.full_dataset, batch_size=self.options.batch_size,
-                                                           shuffle=self.options.shuffle)
-        else:
+        self.full_dataset = WindowGenerator(self.X, self.Y, self.options.input_sequence_length,
+                                            self.options.output_sequence_length)
+        self.full_loader = torch.utils.data.DataLoader(self.full_dataset, batch_size=self.options.batch_size,
+                                                       shuffle=self.options.shuffle)
+        if not self.options.fullTraining:
             self.split_dataset()
             self.train_dataset = WindowGenerator(self.x_train, self.y_train, self.options.input_sequence_length,
                                                  self.options.output_sequence_length)

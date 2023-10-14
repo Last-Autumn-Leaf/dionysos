@@ -41,21 +41,23 @@ class Model():
                     (self.options.input_size + self.options.output_size)
 
             X = torch.zeros((n, Xsize))
+            model = self.model.model
+            prediction = []
 
             for i in range(n):
                 x, _ = dataLoader.full_dataset[i]
-                X[i] = x.t().flatten()
+                if prediction:
+                    x[-self.options.output_sequence_length, -self.options.output_size:] = prediction[-1]
+                predicted_sequence = model.predict(x.t().flatten()[None, :])
+                prediction.append(torch.tensor(predicted_sequence))
+            prediction = torch.tensor(prediction).numpy()
 
-            model = self.model.model
-            predicted_sequence = model.predict(X)
-            unflattenX = self.unflattenXGData(X)
         else:
             print("Not implemented yet")
 
         return {
             'model': model,
-            'predicted_sequence': predicted_sequence,
-            'unflattenX': unflattenX,
+            'predicted_sequence': prediction,
             'X': X
         }
 
@@ -196,7 +198,7 @@ class Model():
         n_test = len(dataLoader.test_dataset)
 
         Xsize = (self.options.input_sequence_length + self.options.output_sequence_length) * (
-                    self.options.input_size + self.options.output_size)
+                self.options.input_size + self.options.output_size)
         Ysize = self.options.output_size if self.options.hourly else self.options.output_sequence_length
 
         X_train = torch.zeros((n_train, Xsize))
