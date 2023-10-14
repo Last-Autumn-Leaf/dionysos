@@ -69,6 +69,8 @@ class DataLoader():
                 get_data_filtered_data(options.targetFeatures, hourly=options.hourly)
         else:
             X, Y = customData
+        X.sort_index(ascending=True, inplace=True)
+        Y.sort_index(ascending=True, inplace=True)
 
         self.dfX = X
         self.dfY = Y

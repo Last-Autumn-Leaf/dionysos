@@ -5,7 +5,7 @@ from ..pre_processing import ALL_FEATURES
 class Options:
 
     def __init__(self,
-                 model_type=RNN_TYPE, learning_rate=0.01, lossFunction='MSE',
+                 model_type=XGBOOST_TYPE, learning_rate=0.01, lossFunction='MSE',
 
                  input_size=25, output_size=1, input_sequence_length=10, output_sequence_length=5,
                  dataset_split=0.7,
