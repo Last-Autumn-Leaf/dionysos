@@ -9,7 +9,7 @@ class Options:
 
                  input_size=25, output_size=1, input_sequence_length=10, output_sequence_length=5,
                  dataset_split=0.7,
-                 targetFeatures=None, shuffle=False, hourly=False,
+                 targetFeatures=None, shuffle=False, hourly=False, recursif=True, fullTraining=False,
 
                  # rnn options
                  cell_type='LSTM', hidden_size=128, num_layers=2, dropout=0.2, batch_size=64, epochs=50,
@@ -35,6 +35,8 @@ class Options:
         self.targetFeatures = targetFeatures
         self.shuffle = shuffle
         self.hourly = hourly
+        self.recursif = recursif
+        self.fullTraining = fullTraining
 
         # RNN options
         self.cell_type = cell_type
@@ -100,9 +102,14 @@ class Options:
             'dataset_split': self.dataset_split,
             'targetFeatures': self.targetFeatures,
             'shuffle': self.shuffle,
-            'hourly': self.hourly
+            'hourly': self.hourly,
+            'recursif': self.recursif,
+            'fullTraining': self.fullTraining
 
         }
+
+    def __copy__(self):
+        return Options(**self.__dict__)
 
     def verif(self):
         if self.batch_size == 1:

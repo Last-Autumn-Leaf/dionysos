@@ -33,10 +33,36 @@ class Model():
         self.showCurrentOptions(self.options.getDataOptions())
         self.setModel()
 
+    def deploy(self, dataLoader):
+        if self.options.model_type == XGBOOST_TYPE:
+
+            n = len(dataLoader.full_dataset)
+            Xsize = (self.options.input_sequence_length + self.options.output_sequence_length) * \
+                    (self.options.input_size + self.options.output_size)
+
+            X = torch.zeros((n, Xsize))
+
+            for i in range(n):
+                x, _ = dataLoader.full_dataset[i]
+                X[i] = x.t().flatten()
+
+            model = self.model.model
+            predicted_sequence = model.predict(X)
+            unflattenX = self.unflattenXGData(X)
+        else:
+            print("Not implemented yet")
+
+        return {
+            'model': model,
+            'predicted_sequence': predicted_sequence,
+            'unflattenX': unflattenX,
+            'X': X
+        }
+
     def setModel(self):
         self.model = self.modeltype2model[self.options.model_type](**self.options.getModelOptions())
 
-    @timeThis("Traning time: ")
+    @timeThis("Training time: ")
     def train(self, dataLoader, test=True, plot=False, n=3, overfiting=False):
         if self.options.model_type == RNN_TYPE:
             self.trainRNN(dataLoader, plot)
@@ -51,12 +77,11 @@ class Model():
         if self.options.model_type == RNN_TYPE:
             x_test, y_test, predicted_sequence = self.testRNN(dataLoader, overfitting)
         elif self.options.model_type == XGBOOST_TYPE:
-            x_test, y_test, predicted_sequence = self.testXGBoost(dataLoader, overfitting)
+            x_test, y_test, predicted_sequence, Y_train = self.testXGBoost(dataLoader, overfitting)
         else:
             raise f"model_type non reconnu {self.options.model_type}"
 
-        show_test(x_test, y_test, predicted_sequence, self.options.input_sequence_length,
-                  self.options.output_sequence_length)
+        show_test(y_test, predicted_sequence, None)
 
     def setTransform(self, dataLoader):
         X, Y = dataLoader.getData()
@@ -166,21 +191,27 @@ class Model():
         return model
 
     def preprocessDataXGBoost(self, dataLoader):
+
         n_train = len(dataLoader.train_dataset)
         n_test = len(dataLoader.test_dataset)
-        X_train = torch.zeros((n_train, self.options.input_sequence_length * self.options.input_size))
-        Y_train = torch.zeros((n_train, self.options.output_sequence_length))
-        X_test = torch.zeros((n_test, self.options.input_sequence_length * self.options.input_size))
-        Y_test = torch.zeros((n_test, self.options.output_sequence_length))
+
+        Xsize = (self.options.input_sequence_length + self.options.output_sequence_length) * (
+                    self.options.input_size + self.options.output_size)
+        Ysize = self.options.output_size if self.options.hourly else self.options.output_sequence_length
+
+        X_train = torch.zeros((n_train, Xsize))
+        Y_train = torch.zeros((n_train, Ysize))
+        X_test = torch.zeros((n_test, Xsize))
+        Y_test = torch.zeros((n_test, Ysize))
 
         for i in range(n_train):
             x, y = dataLoader.train_dataset[i]
             X_train[i] = x.t().flatten()
-            Y_train[i] = y
+            Y_train[i] = y.squeeze()
         for i in range(n_test):
             x, y = dataLoader.test_dataset[i]
             X_test[i] = x.t().flatten()
-            Y_test[i] = y
+            Y_test[i] = y.squeeze()
         return X_train, Y_train, X_test, Y_test
 
     def trainXGBoost(self, dataLoader, plot):
@@ -235,9 +266,12 @@ class Model():
         return x_test, y_test, predicted_sequence
 
     def unflattenXGData(self, x_test):
-        unflatten_xTest = torch.zeros((x_test.shape[0], self.options.input_sequence_length, self.options.input_size))
+        unflatten_xTest = torch.zeros((x_test.shape[0],
+                                       (self.options.input_sequence_length + self.options.output_sequence_length),
+                                       self.options.input_size + self.options.output_size))
         for i in range(len(x_test)):
-            unflatten_xTest[i] = x_test[i].reshape((self.options.input_size, self.options.input_sequence_length)).t()
+            unflatten_xTest[i] = x_test[i].reshape((self.options.input_size + self.options.output_size,
+                                                    self.options.input_sequence_length + self.options.output_sequence_length)).t()
         return unflatten_xTest
 
     def testXGBoost(self, dataLoader, overfiting=False):
@@ -250,26 +284,27 @@ class Model():
         predicted_sequence = model.predict(x_test)
 
         unflatten_xTest = self.unflattenXGData(x_test)
-        return unflatten_xTest, y_test, predicted_sequence
+        return unflatten_xTest, y_test, predicted_sequence, Y_train
 
     def fineTuneXGBoostRandomSearch(self, dataLoader, param_distributions, n_iter=100, cv=3):
         X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
         eval_results, res = self.model.fineTune(X_train, Y_train, X_test, Y_test, param_distributions, n_iter, cv,
                                                 self.options.verbose)
         plot_eval_result_XGBOOST(eval_results)
-        show_test(X_test, Y_test, res, self.options.input_sequence_length, self.options.output_sequence_length)
+        show_test(Y_test, res, None)
 
         # TODO : handle the saving of the models
         saveModel(self)
 
+    @timeThis("RayTuned in : ")
     def fineTuneXGBoostRay(self, dataLoader, param_distributions=None, n_iter=10, scoring='rmse', eval_metric="rmse"):
         assert self.options.model_type == XGBOOST_TYPE, f"Can't use fineTuneXGBoostRay with model type={self.options.model_type}"
         X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
         eval_results, res = self.model.rayTune(X_train, Y_train, X_test, Y_test, param_distributions, n_iter, scoring,
                                                eval_metric)
         plot_eval_result_XGBOOST(eval_results)
-        unflatenX_test = self.unflattenXGData(X_test)
-        show_test(unflatenX_test, Y_test, res, self.options.input_sequence_length, self.options.output_sequence_length)
+        # unflatenX_test = self.unflattenXGData(X_test)
+        show_test(Y_test, res, None)
 
         # TODO : handle the saving of the models
         saveModel(self)
@@ -286,10 +321,12 @@ class Model():
         if self.options.model_type == XGBOOST_TYPE:
             importance = self.model.getModelFeaturesImportance()
             input_size, input_sequence_length = self.options.input_size, self.options.input_sequence_length
+            output_size, output_sequence_length = self.options.output_size, self.options.output_sequence_length
 
-            assert input_size * input_sequence_length == len(importance), f"Feature size calulated to be " \
-                                                                          f"{input_size * input_sequence_length} but found {len(importance)}"
-            reshaped_features = np.reshape(importance, (input_size, input_sequence_length))
+            assert (input_size + output_size) * (input_sequence_length + output_sequence_length) == len(importance), \
+                f"Feature size calulated to be {(input_size + output_size) * (input_sequence_length + output_sequence_length)} but found {len(importance)}"
+            reshaped_features = np.reshape(importance,
+                                           (input_size + output_size, input_sequence_length + output_sequence_length))
             features_scores = np.sum(reshaped_features, axis=1)
             assert len(features_names) == len(features_scores), f"The number of feature names {len(features_names)}" \
                                                                 f" doesn't match the number of features scored {features_scores}"
@@ -312,6 +349,7 @@ class Model():
         plt.yticks(range(n_features), features_names)
         plt.ylim([-1, n_features])
         plt.show()
+        return features_scores, features_names
 
     def rollForwardXGBoost(self, dataLoader):
         # Day Forward-Chaining
@@ -369,6 +407,15 @@ class Model():
         plt.legend()
         plt.show()
 
+    def getModel(self):
+        if self.options.model_type == RNN_TYPE:
+            return self.model
+        elif self.options.model_type == XGBOOST_TYPE:
+            return self.model.model
+        else:
+            print("Wrong model Type")
+
+
 # --------- saving and loading models
 def saveModel(obj, suffix=''):
     modelType = obj.options.model_type
@@ -408,23 +455,56 @@ def plot_eval_result_XGBOOST(eval_results):
     plt.plot(range(1, epochs + 1), val_loss, label='Validation Loss')
     plt.xlabel('Epochs')
     plt.ylabel('RMSE')
-    plt.title('Training and Validation Loss')
+    plt.title(f'Training and Validation Loss (min={min(train_loss):.1f})')
     plt.legend()
     plt.show()
 
 
-def show_test(X_test, Y_test, res, input_sequence_length, output_sequence_length, ntest=3):
-    for i in range(ntest):
-        history_sequence = X_test[i, -input_sequence_length:, -1]
-        target_sequence = Y_test[i]
-        predicted_sequence = res[i]
-        plt.plot(range(input_sequence_length + output_sequence_length),
-                 np.concatenate((history_sequence, target_sequence)), label='True sequence',
-                 linestyle="-", marker="o")
-        plt.plot(range(input_sequence_length, input_sequence_length + output_sequence_length),
-                 predicted_sequence, linestyle="-", marker="o", label='Predicted sequence')
+def show_test(Y_test, res, Y_train=None):
+    if len(Y_test.shape) == 2 and Y_test.shape[0] > 1 and Y_test.shape[1] > 1:  # probably HOURLY
+        fig, axes = plt.subplots(3, 3, figsize=(12, 12))
+        axes = axes.flatten()
+        for i in range(9):
+            ax = axes[i]
+            ax.plot(Y_test[i], label=f'test', linestyle="-", marker="o")
+            ax.plot(res[i], label=f'prédiction', linestyle="-", marker="o")
+            rmse = np.sqrt(mse(Y_test[i], res[i]))
+            MAE = mae(Y_test[i], res[i])
+            ax.set_title(f"RMSE={rmse:.1f} MAE={MAE:.1f}")
+            ax.legend()
+
+        rmse = np.sqrt(mse(Y_test, res))
+        MAE = mae(Y_test, res)
+        test_size = len(Y_test)
+        plt.suptitle(f"RMSE={rmse:.1f} MAE={MAE:.1f} test size={test_size}")
+    else:
+        rmse = np.sqrt(mse(Y_test, res))
+        MAE = mae(Y_test, res)
+        test_size = len(Y_test)
+        if Y_train is not None:
+            train_size = len(Y_train)
+            plt.figure(figsize=(12, 6))
+            plt.plot(np.concatenate((Y_train, Y_test)), label=f'test', linestyle="-", marker="o")
+            plt.plot([i for i in range(train_size, train_size + test_size)],
+                     res, label=f'prédiction', linestyle="-", marker="o")
+        else:
+            plt.plot(Y_test, label=f'test', linestyle="-", marker="o")
+            plt.plot(res, label=f'prédiction', linestyle="-", marker="o")
         plt.legend()
-        plt.title(f'Sequence and Predicted Sequence n°{i}')
-        plt.xlabel('Time Step')
-        plt.ylabel('Value')
-        plt.show()
+        plt.title(f"RMSE={rmse:.1f} MAE={MAE:.1f} test size={test_size}")
+    plt.show()
+
+    # for i in range(ntest):
+    #     history_sequence = X_test[i, -input_sequence_length:, -1]
+    #     target_sequence = Y_test[i]
+    #     predicted_sequence = res[i]
+    #     plt.plot(range(input_sequence_length + output_sequence_length),
+    #              np.concatenate((history_sequence, target_sequence)), label='True sequence',
+    #              linestyle="-", marker="o")
+    #     plt.plot(range(input_sequence_length, input_sequence_length + output_sequence_length),
+    #              predicted_sequence, linestyle="-", marker="o", label='Predicted sequence')
+    #     plt.legend()
+    #     plt.title(f'Sequence and Predicted Sequence n°{i}')
+    #     plt.xlabel('Time Step')
+    #     plt.ylabel('Value')
+    #     plt.show()

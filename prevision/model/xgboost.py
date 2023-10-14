@@ -5,6 +5,7 @@ import ray
 from ray import train, tune
 import matplotlib.pyplot as plt
 
+
 class Xgboost:
     def __init__(self, **modelOptions):
         self.model = xgb.XGBRegressor(**modelOptions)
@@ -83,8 +84,8 @@ class Xgboost:
         best_hyperparameters = best_result["config"]
         best_mae = best_result['mae']
         best_rmse = best_result['rmse']
-        print(f"Best MAE validation:", best_mae)
-        print(f"Best RMSE validation:", best_rmse)
+        print(f"Best MAE validation:{best_mae:.1f}")
+        print(f"Best RMSE validation:{best_rmse:.1f}")
         print("Best hyperparameters:", best_hyperparameters)
 
         best_model.fit(X_train, Y_train,
@@ -97,3 +98,6 @@ class Xgboost:
 
     def getModelFeaturesImportance(self):
         return self.model.feature_importances_
+
+    def is_fitted(self):
+        return self.model.booster is not None
