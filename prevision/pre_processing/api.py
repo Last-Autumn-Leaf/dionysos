@@ -2,10 +2,31 @@ import json
 import requests
 import pandas as pd
 
-from .DataTable import DataTable, WeatherData
+from prevision import timeThis
+from .DataTable import DataTable, WeatherDatabase, WeatherDataTable, EventAttendance, EventAttendanceDataTable
 from .utils import ACCESS_TOKEN_PREDICT_HQ, affluencePath, ATTENDANCE_BASE_CAT, ST_CATH_LOC, meteoPath, LA_SALLE, \
-    ACCESS_TOKEN_VISUAL_CROSSING, WeatherDataTable, castStr2Datetime
+    ACCESS_TOKEN_VISUAL_CROSSING, castStr2Datetime, meteoVCPath, WeatherDataTableName, attendancePath
 from datetime import datetime, timedelta
+import atexit
+
+
+class Api():
+    def __init__(self, endpoint, token, dt, csvPath):
+        self.endpoint = endpoint
+        self.token = token
+        self.dt = dt()
+        self.csvPath = csvPath
+        atexit.register(self.dump2CSV)
+
+    def dump2CSV(self):
+        try:
+            if self.dt and self.csvPath:
+                df = self.dt.get_all_data()
+                df.to_csv(self.csvPath, index=False)
+                print(f"saving {self.dt.database.getName()} at {self.csvPath}")
+        except Exception as e:
+            print(f"Saving {self.dt.database.getName()} at {self.csvPath} failed")
+            print("\t", str(e))
 
 
 class api_predicthq():
@@ -254,32 +275,28 @@ class api_weather():
         return df_meteo
 
 
-class visual_Crossing():
-    def __init__(self, token=ACCESS_TOKEN_VISUAL_CROSSING):
+class Api_VC(Api):
+    endpoint = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
+
+    def __init__(self):
+        super().__init__(self.endpoint, ACCESS_TOKEN_VISUAL_CROSSING, WeatherDataTable, meteoVCPath)
+        self.resolvedAddress = None
         self.MAX_COST = 650
-        self.token = token
-        self.endpoint = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
         self.unit = 'metric'
-        self.dt = DataTable()
 
     @staticmethod
     def getClosestStation(jsonData):
         stations = sorted([(v['distance'], k) for k, v in jsonData['stations'].items()], key=lambda x: x[0])
         return stations[0][1]
 
-    def getStationIDFromLocation(self, location):
+    def getIDFromLocation(self, location):
+        StoreAddressData = ['resolvedAddress', 'latitude', 'longitude']
         response = requests.request("GET", f"{self.endpoint}/{location}?unitGroup={self.unit}&include=current"
                                            f"&key={self.token}&contentType=json")
         checkResponse(response)
         jsonData = response.json()
+        self.resolvedAddress = {k: jsonData[k] for k in StoreAddressData if k in jsonData}
         return self.getClosestStation(jsonData)
-
-    @staticmethod
-    def getDatesBetween(start_date, end_date):
-        start_date = castStr2Datetime(start_date)
-        end_date = castStr2Datetime(end_date)
-        date_list = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
-        return [date.strftime('%Y-%m-%d') for date in date_list]
 
     @staticmethod
     def sumDateRanges(date_ranges):
@@ -292,53 +309,43 @@ class visual_Crossing():
         print("Total number of days:", total_days)
         return total_days
 
-    def insertToDB(self, location, start_date, end_date, stationID=None):
-        if stationID is None:
-            stationID = self.getStationIDFromLocation(location)
+    def insertToDB(self, location, start_date, end_date, id=None):
+        if id is None:
+            id = self.getIDFromLocation(location)
         dt = self.dt
         response = requests.request("GET",
                                     f"{self.endpoint}/{location}/{start_date}/{end_date}?unitGroup={self.unit}&include=days"
                                     f"&key={self.token}&contentType=json")
         checkResponse(response)
         jsonData = response.json()
-        df = pd.DataFrame(jsonData['days']).filter(dt.get_col_names_from_table(WeatherData))
-        df['stationID'] = stationID
-        dt.insert_data_from_dataframe(df, WeatherData)
+        df = pd.DataFrame(jsonData['days']).filter(dt.get_col_names())
+        df['id'] = id
+        dt.insert_df(df)
 
+    @timeThis("Received meteo data in:")
     def getMeteoDate(self, location, start_date, end_date):
-        stationID = self.getStationIDFromLocation(location)
+        stationID = self.getIDFromLocation(location)
         dt = self.dt
-        oldData = dt.get_weather_date_between(stationID, start_date, end_date)
+        oldData = dt.get_date_between(start_date, end_date, stationID)
 
         oldDatetime = set(oldData['datetime'].tolist())
-        allRanges = set(self.getDatesBetween(start_date, end_date))
-        difference_set = allRanges.difference(oldDatetime)
-        if not difference_set:
+        allRanges = set(getDatesBetween(start_date, end_date))
+        missingDates = getMissingDatesRanges(oldDatetime, allRanges)
+
+        if not missingDates:
             return oldData
-        difference_set = sorted(list(difference_set))  # shoudl already be sorted but just in case
-        missingDates = []
-        lastIndex = 0
-        for i in range(1, len(difference_set)):
-            if i < len(difference_set) \
-                    and castStr2Datetime(difference_set[i - 1]) + timedelta(days=1) != castStr2Datetime(
-                difference_set[i]):
-                missingDates.append((difference_set[lastIndex], difference_set[i - 1]))
-                lastIndex = i
-                continue
-            if i == len(difference_set) - 1:
-                missingDates.append((difference_set[lastIndex], difference_set[i]))
-        print("missing range dates found:\n", *missingDates)
+
         assert self.sumDateRanges(
-            missingDates) < self.MAX_COST, f"The query exceed the Max cost={self.MAX_COST,} of days " \
+            missingDates) < self.MAX_COST, f"The query exceed the Max cost={self.MAX_COST} of days " \
                                            f"allow to request !"
         for (sdate, edate) in missingDates:
             self.insertToDB(location, sdate, edate, stationID)
 
-        return dt.get_weather_date_between(stationID, start_date, end_date)
+        return dt.get_date_between(start_date, end_date, stationID)
 
     def getNext2Weeks(self, location):
         dt = self.dt
-        stationID = self.getStationIDFromLocation(location)
+        stationID = self.getIDFromLocation(location)
         response = requests.request("GET", f"{self.endpoint}/{location}?unitGroup={self.unit}&include=days"
                                            f"&key={self.token}&contentType=json")
         checkResponse(response)
@@ -346,15 +353,216 @@ class visual_Crossing():
         print("meteo data received")
         jsonData = response.json()
 
-        df = pd.DataFrame(jsonData['days']).filter(dt.get_col_names_from_table(WeatherData))
-        df['stationID'] = stationID
-        dt.insert_data_from_dataframe(df, WeatherData)
+        df = pd.DataFrame(jsonData['days']).filter(dt.get_col_names())
+        df['id'] = stationID
+        dt.insert_df(df)
         return df
+
+
+class Api_PHQ(Api):
+    endpoint = "https://api.predicthq.com/v1"
+
+    def __init__(self):
+        super().__init__(self.endpoint, ACCESS_TOKEN_PREDICT_HQ, EventAttendanceDataTable, attendancePath)
+        self.selected_cat = ATTENDANCE_BASE_CAT
+
+    def getIDFromLocation(self, location, resolvedAddress):
+        '''
+        Cette fonction permet de récupérer l'id d'un lieu à partir de son adresse
+
+        Parameters
+        ----------
+        address : str
+            Adresse du lieu
+
+        Returns
+        -------
+        id : str
+            Id du lieu
+        longitude : float
+            Longitude du lieu
+        latitude : float
+            Latitude du lieu
+
+        '''
+        params = {"q": location} if resolvedAddress is None else \
+            {"location": f"@{resolvedAddress['latitude']},{resolvedAddress['longitude']}"}
+        params["limit"] = 2
+
+        response = requests.get(
+            url=f"{self.endpoint}/places/",
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Accept": "application/json"
+            },
+            params=params
+        )
+
+        checkResponse(response)
+        data = response.json()
+        id = data['results'][0]['id']
+        longitude = data['results'][0]['location'][0]
+        latitude = data['results'][0]['location'][1]
+        geo = {'lat': latitude, 'lon': longitude, 'radius': "1mi"}
+
+        return id, geo
+
+    @staticmethod
+    def batch_day(start_date, end_date):
+        '''
+        Cette fonction permet de créer des paquets de 90 jours pour récuperer les données d'attendance.
+        '''
+        # On crée une liste de date entre start_date et end_date
+        date_list = pd.date_range(start_date, end_date).tolist()
+        # On crée des paquets de 90 jours
+        batch_list = []
+        for i in range(0, len(date_list), 90):
+            batch_list.append(date_list[i:i + 90])
+        # convertir les dates en str et en format YYYY-MM-DD
+        for i in range(len(batch_list)):
+            batch_list[i] = [str(date)[:10] for date in batch_list[i]]
+        return batch_list
+
+    def get_df_attendance_90(self, id, start_date, end_date, geo):
+        '''
+        Cette fonction permet de récupérer les données d'attendance pour une période de 90 jours ou moins
+
+        Parameters
+        ----------
+        start_date : str
+            Date de début de la période
+        end_date : str
+            Date de fin de la période
+        location_geo : list
+            Coordonnées géographiques du lieu
+
+        Returns
+        -------
+        df : DataFrame
+            DataFrame contenant les données d'attendance
+
+        '''
+        # Recuperer les noms des types d'evenements
+        ATTENDANCE_BASE_CAT = self.selected_cat
+        # Création du dictionnaire de données
+        data = {
+            "active": {
+                "gte": start_date,
+                "lte": end_date
+            },
+            "location": {
+                "geo": geo
+            }
+        }
+        # Ajouter les événements au dictionnaire
+        for event in ATTENDANCE_BASE_CAT:
+            data[event] = True
+        # Appel de l'API
+        response = requests.post(
+            url=f"{self.endpoint}/features",
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Accept": "application/json"
+            },
+            json=data
+        )
+        checkResponse(response)
+        api_result = response.json()
+        # Création d'un dictionnaire pour stocker les données finales
+        list_attendance = {'date': []}
+        # Ajouter les événements au dictionnaire
+        for event in ATTENDANCE_BASE_CAT:
+            list_attendance[event[4:]] = []
+        try:
+            # Parcourir les résultats et extraire les données
+            for result in api_result['results']:
+                list_attendance['date'].append(result['date'])
+                for event in ATTENDANCE_BASE_CAT:
+                    list_attendance[event[4:]].append(result[event]['stats']['sum'])
+
+            # Création du DataFrame à partir des données d'attendance
+            df = pd.DataFrame(list_attendance)
+            df['id'] = id
+            df.rename(columns={'date': 'datetime'}, inplace=True)
+            df['datetime'] = pd.to_datetime(df['datetime']).dt.strftime('%Y-%m-%d')
+            return df
+        except:
+            raise "Error in Api Call and results :{}".format(api_result['errors'])
+
+    def insertToDB(self, location, start_date, end_date, id=None, geo=None):
+        if id is None or geo is None:
+            id, geo = self.getIDFromLocation(location)
+        dt = self.dt
+
+        date_list = pd.date_range(start_date, end_date).tolist()
+        # On verifie si la periode de temps demandé est inférieur à 90 jours
+        if len(date_list) <= 90:
+            # On récupère les données d'attendance sur la période demandée
+            dataframe_attendance = self.get_df_attendance_90(id, start_date, end_date, geo)
+        else:
+            # On crée des paquets de 90 jours pour récuperer les données d'attendance
+            batch_day_list = self.batch_day(start_date, end_date)
+            # On récupère les données d'attendance sur chaque paquet de 90 jours
+            feature_list = []
+            for batch in batch_day_list:
+                dataframe_attendance_batch = self.get_df_attendance_90(id, batch[0], batch[-1], geo)
+                feature_list.append(dataframe_attendance_batch)
+            # On concatène les données d'attendance
+            dataframe_attendance = pd.concat(feature_list, ignore_index=True)
+        return dt.insert_df(dataframe_attendance)
+
+    def getAttendanceData(self, location, start_date, end_date, resolvedAddress=None):
+        PHQ_cap = (pd.to_datetime('today') - pd.DateOffset(years=1) + pd.DateOffset(days=1)).strftime('%Y-%m-%d')
+        if start_date < PHQ_cap:
+            print(f'Setting start_date to {PHQ_cap}')
+            start_date = PHQ_cap
+        id, geo = self.getIDFromLocation(location, resolvedAddress)
+
+        dt = self.dt
+        oldData = dt.get_date_between(start_date, end_date, id)
+
+        oldDatetime = set([x.strftime("%Y-%m-%d") for x in oldData['datetime']])
+        allRanges = set(getDatesBetween(start_date, end_date))
+        missingDates = getMissingDatesRanges(oldDatetime, allRanges)
+
+        if not missingDates:
+            return oldData
+
+        for (sdate, edate) in missingDates:
+            self.insertToDB(location, sdate, edate, id, geo)
+
+        return dt.get_date_between(start_date, end_date, id)
 
 
 def checkResponse(response):
     if response.status_code != 200:
-        raise ValueError(f'Unexpected Status code:\n{response.status_code}')
+        raise ValueError(f'Unexpected Status code:\n{response.status_code}\n{response.text}')
+
+
+def getDatesBetween(start_date, end_date):
+    start_date = castStr2Datetime(start_date)
+    end_date = castStr2Datetime(end_date)
+    date_list = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+    return [date.strftime('%Y-%m-%d') for date in date_list]
+
+
+def getMissingDatesRanges(oldDatetime, allRanges):
+    difference_set = allRanges.difference(oldDatetime)
+    if not difference_set:
+        return;
+    difference_set = sorted(list(difference_set))  # should already be sorted but just in case
+    missingDates = []
+    lastIndex = 0
+    for i in range(1, len(difference_set)):
+        if i < len(difference_set) \
+                and castStr2Datetime(difference_set[i - 1]) + timedelta(days=1) != castStr2Datetime(difference_set[i]):
+            missingDates.append((difference_set[lastIndex], difference_set[i - 1]))
+            lastIndex = i
+            continue
+        if i == len(difference_set) - 1:
+            missingDates.append((difference_set[lastIndex], difference_set[i]))
+    print("missing range dates found:\n", *missingDates)
+    return missingDates
 
 
 if __name__ == '__main__':

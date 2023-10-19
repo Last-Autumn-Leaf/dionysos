@@ -14,8 +14,9 @@ mysql_database = os.environ.get('MYSQL_DATABASE')
 mysql_user = os.environ.get('MYSQL_USER')
 mysql_password = os.environ.get('MYSQL_PASSWORD')
 mysql_root_password = os.environ.get('MYSQL_ROOT_PASSWORD')
-WeatherDataTable = 'weather_data'
 
+WeatherDataTableName = 'weather_data'
+EventAttendanceDataTableName = 'event_attendance'
 # File path
 project_dir = setProjectpath()
 dataDir = project_dir / 'prevision' / 'data'
@@ -31,6 +32,9 @@ nhl_path = dataDir / "nhl_mtl_schedule_day.csv"
 hourly_client_CLS = dataDir / "client_CLS.csv"
 daily_sales_CLS = dataDir / "daily_sales_CLS.csv"
 hours_sales_CLS = dataDir / "hours_sales_CLS.csv"
+
+meteoVCPath = dataDir / "meteo_VC.csv"
+attendancePath = dataDir / "attendance_PHQ.csv"
 
 # Variables à utiliser pour l'Api de prévision d'attendance PredictHQ
 ATTENDANCE_BASE_CAT = [

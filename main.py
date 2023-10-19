@@ -1,5 +1,5 @@
 from prevision import Options, Model, DataLoader, XGBOOST_TYPE, getAllDataFromCSV, RNN_TYPE, hourlySalesPath, \
-    dailySalesPath, getPrevSells, visual_Crossing, modei2Path, getDataFromMode, DataTable
+    dailySalesPath, getPrevSells, Api_VC, modei2Path, getDataFromMode, DataTable, api_predicthq, Api_PHQ
 import numpy as np
 
 
@@ -11,9 +11,19 @@ def main(mode, dataPath, localisation):
     # min_date = '2023-10-14'
     # max_date = '2023-11-01'
     print("From", min_date, " to ", max_date)
-    vc = visual_Crossing()
+
+    # Meteo
+    vc = Api_VC()
     # vc.getNext2Weeks(localisation)
-    print(vc.getMeteoDate(localisation, min_date, max_date))
+    meteoDF = vc.getMeteoDate(localisation, min_date, max_date)
+
+    # PredictHQ
+    # ap=api_predicthq()
+    # ap.get_today_df_attendance()
+
+    predicthq = Api_PHQ()
+    attendanceDf = predicthq.getAttendanceData(localisation, min_date, max_date, vc.resolvedAddress)
+    print()
 
 
 if __name__ == '__main__':

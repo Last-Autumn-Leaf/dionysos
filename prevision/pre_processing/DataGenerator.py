@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from .utils import jours_feries, vacances, ALL_FEATURES, dataVentePath, mma_path, nba_path, nfl_path, nhl_path, \
     dailySalesPath, meteoPath, affluencePath, hourlySalesPath, modeStr2i, MODE_DAILY_SALES, MODE_HOURLY_SALES, \
-    MODE_HOURLY_CLIENT, isModeValid
+    MODE_HOURLY_CLIENT, isModeValid, meteoVCPath
 
 
 def date2day(date_object):
