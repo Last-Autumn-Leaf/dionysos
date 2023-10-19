@@ -1,6 +1,11 @@
+import json
 import requests
-from .utils import ACCESS_TOKEN_PREDICT_HQ, affluencePath, ATTENDANCE_BASE_CAT, ST_CATH_LOC, meteoPath, LA_SALLE
 import pandas as pd
+
+from .DataTable import DataTable, WeatherData
+from .utils import ACCESS_TOKEN_PREDICT_HQ, affluencePath, ATTENDANCE_BASE_CAT, ST_CATH_LOC, meteoPath, LA_SALLE, \
+    ACCESS_TOKEN_VISUAL_CROSSING, WeatherDataTable, castStr2Datetime
+from datetime import datetime, timedelta
 
 
 class api_predicthq():
@@ -247,6 +252,109 @@ class api_weather():
         else:
             df_meteo = self.get_meteodata(start_date, end_date)
         return df_meteo
+
+
+class visual_Crossing():
+    def __init__(self, token=ACCESS_TOKEN_VISUAL_CROSSING):
+        self.MAX_COST = 650
+        self.token = token
+        self.endpoint = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
+        self.unit = 'metric'
+        self.dt = DataTable()
+
+    @staticmethod
+    def getClosestStation(jsonData):
+        stations = sorted([(v['distance'], k) for k, v in jsonData['stations'].items()], key=lambda x: x[0])
+        return stations[0][1]
+
+    def getStationIDFromLocation(self, location):
+        response = requests.request("GET", f"{self.endpoint}/{location}?unitGroup={self.unit}&include=current"
+                                           f"&key={self.token}&contentType=json")
+        checkResponse(response)
+        jsonData = response.json()
+        return self.getClosestStation(jsonData)
+
+    @staticmethod
+    def getDatesBetween(start_date, end_date):
+        start_date = castStr2Datetime(start_date)
+        end_date = castStr2Datetime(end_date)
+        date_list = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+        return [date.strftime('%Y-%m-%d') for date in date_list]
+
+    @staticmethod
+    def sumDateRanges(date_ranges):
+        total_days = 0
+        for start_date, end_date in date_ranges:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d')
+            end_date = datetime.strptime(end_date, '%Y-%m-%d')
+            delta = end_date - start_date
+            total_days += delta.days
+        print("Total number of days:", total_days)
+        return total_days
+
+    def insertToDB(self, location, start_date, end_date, stationID=None):
+        if stationID is None:
+            stationID = self.getStationIDFromLocation(location)
+        dt = self.dt
+        response = requests.request("GET",
+                                    f"{self.endpoint}/{location}/{start_date}/{end_date}?unitGroup={self.unit}&include=days"
+                                    f"&key={self.token}&contentType=json")
+        checkResponse(response)
+        jsonData = response.json()
+        df = pd.DataFrame(jsonData['days']).filter(dt.get_col_names_from_table(WeatherData))
+        df['stationID'] = stationID
+        dt.insert_data_from_dataframe(df, WeatherData)
+
+    def getMeteoDate(self, location, start_date, end_date):
+        stationID = self.getStationIDFromLocation(location)
+        dt = self.dt
+        oldData = dt.get_weather_date_between(stationID, start_date, end_date)
+
+        oldDatetime = set(oldData['datetime'].tolist())
+        allRanges = set(self.getDatesBetween(start_date, end_date))
+        difference_set = allRanges.difference(oldDatetime)
+        if not difference_set:
+            return oldData
+        difference_set = sorted(list(difference_set))  # shoudl already be sorted but just in case
+        missingDates = []
+        lastIndex = 0
+        for i in range(1, len(difference_set)):
+            if i < len(difference_set) \
+                    and castStr2Datetime(difference_set[i - 1]) + timedelta(days=1) != castStr2Datetime(
+                difference_set[i]):
+                missingDates.append((difference_set[lastIndex], difference_set[i - 1]))
+                lastIndex = i
+                continue
+            if i == len(difference_set) - 1:
+                missingDates.append((difference_set[lastIndex], difference_set[i]))
+        print("missing range dates found:\n", *missingDates)
+        assert self.sumDateRanges(
+            missingDates) < self.MAX_COST, f"The query exceed the Max cost={self.MAX_COST,} of days " \
+                                           f"allow to request !"
+        for (sdate, edate) in missingDates:
+            self.insertToDB(location, sdate, edate, stationID)
+
+        return dt.get_weather_date_between(stationID, start_date, end_date)
+
+    def getNext2Weeks(self, location):
+        dt = self.dt
+        stationID = self.getStationIDFromLocation(location)
+        response = requests.request("GET", f"{self.endpoint}/{location}?unitGroup={self.unit}&include=days"
+                                           f"&key={self.token}&contentType=json")
+        checkResponse(response)
+
+        print("meteo data received")
+        jsonData = response.json()
+
+        df = pd.DataFrame(jsonData['days']).filter(dt.get_col_names_from_table(WeatherData))
+        df['stationID'] = stationID
+        dt.insert_data_from_dataframe(df, WeatherData)
+        return df
+
+
+def checkResponse(response):
+    if response.status_code != 200:
+        raise ValueError(f'Unexpected Status code:\n{response.status_code}')
 
 
 if __name__ == '__main__':

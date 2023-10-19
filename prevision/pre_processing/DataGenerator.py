@@ -3,7 +3,8 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 from .utils import jours_feries, vacances, ALL_FEATURES, dataVentePath, mma_path, nba_path, nfl_path, nhl_path, \
-    dailySalesPath, meteoPath, affluencePath, hourlySalesPath
+    dailySalesPath, meteoPath, affluencePath, hourlySalesPath, modeStr2i, MODE_DAILY_SALES, MODE_HOURLY_SALES, \
+    MODE_HOURLY_CLIENT, isModeValid
 
 
 def date2day(date_object):
@@ -51,9 +52,26 @@ def remove_keys_not_in_list(df, feature_list):
     return df[union]
 
 
-def getPrevSells(hourly: bool) -> (pd.DataFrame, list):
+isDfHourly = lambda x: 'date_time' in x.columns and 'periode' in x.columns
+isDfDaily = lambda x: 'Date' in x.columns and 'vente' in x.columns and len(x.columns) == 2
+
+
+def getPrevSells(hourly: bool, dataPath=None) -> (pd.DataFrame, list):
+    if dataPath is not None:
+        df = pd.read_csv(dataPath)
+        if isDfHourly(df):
+            hourly = True
+            print("Hourly format detected")
+        elif isDfDaily(df):
+            hourly = False
+            print("Daily format detected")
+        else:
+            raise ValueError("Format non détecté")
+    else:
+        dataPath = hourlySalesPath if hourly else dailySalesPath
+
     if hourly:
-        df_sales = pd.read_csv(hourlySalesPath).drop(['sources', 'periode', 'day'], axis=1)
+        df_sales = pd.read_csv(dataPath).drop(['sources', 'periode', 'day'], axis=1)
         df_sales['date_time'] = pd.to_datetime(df_sales['date_time']).dt.date
 
         X = df_sales.values
@@ -74,7 +92,44 @@ def getPrevSells(hourly: bool) -> (pd.DataFrame, list):
         prevSellsDf.set_index('date', inplace=True)
     else:
         col_names = ['vente']
-        prevSellsDf = pd.read_csv(dailySalesPath, parse_dates=['Date'], index_col='Date').rename_axis('date')
+        prevSellsDf = pd.read_csv(dataPath, parse_dates=['Date'], index_col='Date').rename_axis('date')
+
+    return prevSellsDf.dropna(), col_names
+
+
+def getDataFromMode(mode, dataPath):
+    if not isModeValid(mode):
+        raise ValueError(f"invalid mode {mode}")
+    if type(mode) == str:
+        mode = modeStr2i[mode]
+
+    if mode == MODE_DAILY_SALES:
+        col_names = ['vente']
+        prevSellsDf = pd.read_csv(dataPath, parse_dates=['Date'], index_col='Date').rename_axis('date')
+    elif mode == MODE_HOURLY_SALES:
+        df_sales = pd.read_csv(dataPath).drop(['sources', 'periode', 'day'], axis=1)
+        df_sales['date_time'] = pd.to_datetime(df_sales['date_time']).dt.date
+
+        X = df_sales.values
+        listHours = ["{:02d}:{:02d}".format(hour, minute) for hour in range(24) for minute in range(0, 60, 30)]
+        steps = 24 * 2
+        ndays = len(X) // (steps)
+        newX = np.zeros((ndays, steps))
+        dt = [0] * ndays
+        for i in range(ndays):
+            dt[i] = X[i * steps, 0]
+            newX[i] = X[i * steps:steps * (i + 1), 1]
+        start_i = 23
+        encoding_h_str = 'h_'
+        col_names = [f'{encoding_h_str}{x}' for x in listHours[start_i:]]
+        prevSellsDf = pd.DataFrame(newX[:, start_i:], columns=col_names)
+        prevSellsDf['date'] = dt
+        prevSellsDf['date'] = prevSellsDf['date'].astype('datetime64[ns]')
+        prevSellsDf.set_index('date', inplace=True)
+    elif mode == MODE_HOURLY_CLIENT:
+        raise ValueError(f"mode {mode} not implemented yet")
+    else:
+        raise ValueError(f"mode {mode} not recognized !")
 
     return prevSellsDf.dropna(), col_names
 

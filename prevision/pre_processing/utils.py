@@ -1,6 +1,20 @@
-from ..utils import setProjectpath
+from datetime import datetime
 
-ACCESS_TOKEN_PREDICT_HQ = 'MsCeNe_b7RZjXVS2W0vblcolx8WV5R0Cu0WwYdiN'
+from ..utils import setProjectpath
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from the .env file
+load_dotenv()
+
+ACCESS_TOKEN_PREDICT_HQ = os.getenv('ACCESS_TOKEN_PREDICT_HQ')
+ACCESS_TOKEN_VISUAL_CROSSING = os.getenv('ACCESS_TOKEN_VISUAL_CROSSING')
+# db variable
+mysql_database = os.environ.get('MYSQL_DATABASE')
+mysql_user = os.environ.get('MYSQL_USER')
+mysql_password = os.environ.get('MYSQL_PASSWORD')
+mysql_root_password = os.environ.get('MYSQL_ROOT_PASSWORD')
+WeatherDataTable = 'weather_data'
 
 # File path
 project_dir = setProjectpath()
@@ -14,6 +28,9 @@ mma_path = dataDir / "mma_schedule_day.csv"
 nba_path = dataDir / "nba_schedule_day.csv"
 nfl_path = dataDir / "nfl_schedule.csv"
 nhl_path = dataDir / "nhl_mtl_schedule_day.csv"
+hourly_client_CLS = dataDir / "client_CLS.csv"
+daily_sales_CLS = dataDir / "daily_sales_CLS.csv"
+hours_sales_CLS = dataDir / "hours_sales_CLS.csv"
 
 # Variables à utiliser pour l'Api de prévision d'attendance PredictHQ
 ATTENDANCE_BASE_CAT = [
@@ -168,3 +185,16 @@ vacances = [
     ('2023-03-04', '2023-03-19'),  # Vacances de mars
     ('2023-06-24', '2023-08-27')  # Vacances d'été
 ]
+
+MODE_DAILY_SALES = 0
+MODE_HOURLY_SALES = 1
+MODE_HOURLY_CLIENT = 2
+ALL_MODES = [MODE_DAILY_SALES, MODE_HOURLY_SALES, MODE_HOURLY_CLIENT]
+modeStr2i = {'daily_sales': MODE_DAILY_SALES, 'hourly_sales': MODE_HOURLY_SALES, 'hourly_client': MODE_HOURLY_CLIENT}
+modei2str = {MODE_DAILY_SALES: 'daily_sales', MODE_HOURLY_SALES: 'hourly_sales', MODE_HOURLY_CLIENT: 'hourly_client'}
+
+modei2Path = {MODE_DAILY_SALES: daily_sales_CLS,
+              MODE_HOURLY_SALES: hours_sales_CLS,
+              MODE_HOURLY_CLIENT: hourly_client_CLS}
+isModeValid = lambda x: x in ALL_MODES or x in modeStr2i
+castStr2Datetime = lambda x: datetime.strptime(x, '%Y-%m-%d')
