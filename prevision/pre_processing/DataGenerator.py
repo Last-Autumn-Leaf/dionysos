@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from .utils import jours_feries, vacances, ALL_FEATURES, dataVentePath, mma_path, nba_path, nfl_path, nhl_path, \
     dailySalesPath, meteoPath, affluencePath, hourlySalesPath, modeStr2i, MODE_DAILY_SALES, MODE_HOURLY_SALES, \
-    MODE_HOURLY_CLIENT, isModeValid, meteoVCPath
+    MODE_HOURLY_CLIENT, isModeValid, meteoVCPath, DATE_COL
 
 
 def date2day(date_object):
@@ -105,7 +105,7 @@ def getDataFromMode(mode, dataPath):
 
     if mode == MODE_DAILY_SALES:
         col_names = ['vente']
-        prevSellsDf = pd.read_csv(dataPath, parse_dates=['Date'], index_col='Date').rename_axis('date')
+        prevSellsDf = pd.read_csv(dataPath, parse_dates=['Date']).rename(columns={'Date': DATE_COL})
     elif mode == MODE_HOURLY_SALES:
         df_sales = pd.read_csv(dataPath).drop(['sources', 'periode', 'day'], axis=1)
         df_sales['date_time'] = pd.to_datetime(df_sales['date_time']).dt.date
@@ -123,9 +123,8 @@ def getDataFromMode(mode, dataPath):
         encoding_h_str = 'h_'
         col_names = [f'{encoding_h_str}{x}' for x in listHours[start_i:]]
         prevSellsDf = pd.DataFrame(newX[:, start_i:], columns=col_names)
-        prevSellsDf['date'] = dt
-        prevSellsDf['date'] = prevSellsDf['date'].astype('datetime64[ns]')
-        prevSellsDf.set_index('date', inplace=True)
+        prevSellsDf[DATE_COL] = dt
+        prevSellsDf[DATE_COL] = prevSellsDf[DATE_COL].astype('datetime64[ns]')
     elif mode == MODE_HOURLY_CLIENT:
         raise ValueError(f"mode {mode} not implemented yet")
     else:
@@ -180,7 +179,8 @@ def get_all_data(hourly=False):
     # Merge
     # -----------------
     # Concaténer les DataFrames en utilisant la colonne "date" comme clé de fusion
-    df = pd.merge(pd.merge(prevSellsDf, meteoDf, on='date'), attendanceDf, on='date').dropna()
+    # df = pd.merge(pd.merge(prevSellsDf, meteoDf, on='date'), attendanceDf, on='date').dropna()
+    df = mergeDfList([prevSellsDf, meteoDf, attendanceDf])
     # Réinitialiser les indices
     # df = df.reset_index(drop=True)
 
@@ -193,24 +193,34 @@ def get_all_data(hourly=False):
     return X, Y
 
 
-def addDates(df):
+def mergeDfList(dfList, on=DATE_COL):
+    assert dfList, f"dfList {dfList} is not a valid value"
+    df = dfList[0]
+    for i in range(1, len(dfList)):
+        df = pd.merge(df, dfList[i], on=on).dropna()
+    # df.set_index('date_column', inplace=True)
+    return df
+
+
+def addDates(df, datetime_col=DATE_COL):
     # Jours de la semaine
     # On ajoute une colonne date
-    df['day'] = df.index.map(date2day)
+    df['day'] = df[datetime_col].map(date2day)
     # hot encode day
     df = pd.get_dummies(df, columns=['day'])
 
     # Vacances
     # On ajoute une colonne
-    df['vacance'] = df.index.map(date2vacances)
+    df['vacance'] = df[datetime_col].map(date2vacances)
 
     # Jours fériés
     # On ajoute une colonne
-    df['ferie'] = df.index.map(date2jourferie)
+    df['ferie'] = df[datetime_col].map(date2jourferie)
     return df
 
 
-def addSportBroadcast(df):
+def generateSportBroadcast():
+    res = []
     csv_files = [
         (mma_path, 'match_mma'),
         (nba_path, 'match_nba'),
@@ -218,16 +228,20 @@ def addSportBroadcast(df):
         (nhl_path, 'match_nhl')
     ]
 
-    for file_info in csv_files:
-        file_name, column_name = file_info
-        schedule = pd.read_csv(file_name, sep=',', parse_dates=['date'], index_col='date')
-        schedule = schedule.rename(columns={'Match': column_name})
-        df = pd.merge(df, schedule, on='date', how='left')
+    for file_name, column_name in csv_files:
+        schedule = pd.read_csv(file_name, sep=',', parse_dates=['date'])
+        schedule = schedule.rename(columns={'Match': column_name, 'date': DATE_COL}).fillna(0)
+        res.append(schedule)
 
-    # Remplacez les valeurs NaN par 0
-    df = df.fillna(0)
+    print("match data loaded")
+    return res
 
-    return df
+
+def addSportBroadcast(df, on=DATE_COL):
+    for matchDf in generateSportBroadcast():
+        df = pd.merge(df, matchDf, on=on, how='left')
+
+    return df.fillna(0)
 
 
 def get_data_filtered_data(features=ALL_FEATURES, hourly=False):

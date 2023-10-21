@@ -50,7 +50,7 @@ class Model():
                     x[-self.options.output_sequence_length, -self.options.output_size:] = prediction[-1]
                 predicted_sequence = model.predict(x.t().flatten()[None, :])
                 prediction.append(torch.tensor(predicted_sequence))
-            prediction = torch.tensor(prediction).numpy()
+            prediction = torch.cat(prediction, dim=0)
 
         else:
             print("Not implemented yet")
@@ -466,7 +466,7 @@ def show_test(Y_test, res, Y_train=None):
     if len(Y_test.shape) == 2 and Y_test.shape[0] > 1 and Y_test.shape[1] > 1:  # probably HOURLY
         fig, axes = plt.subplots(3, 3, figsize=(12, 12))
         axes = axes.flatten()
-        for i in range(9):
+        for i in range(min(len(Y_test), 9)):
             ax = axes[i]
             ax.plot(Y_test[i], label=f'test', linestyle="-", marker="o")
             ax.plot(res[i], label=f'prédiction', linestyle="-", marker="o")

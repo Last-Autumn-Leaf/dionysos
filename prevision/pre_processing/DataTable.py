@@ -1,6 +1,7 @@
 import pandas as pd
 
-from .utils import mysql_user, mysql_password, mysql_database, WeatherDataTableName, EventAttendanceDataTableName
+from .utils import mysql_user, mysql_password, mysql_database, WeatherDataTableName, EventAttendanceDataTableName, \
+    DATE_COL, meteoVCPath, attendancePath
 from sqlalchemy import create_engine, Column, Integer, DateTime, Float, Text, String, and_, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -13,39 +14,58 @@ encoded_url = lambda url_string: urllib.parse.quote(url_string)
 
 
 class DataTable:
+    pathCSV = None
+    database = None
+
     def __init__(self, database):
-        self.engine = create_engine(f'mysql+pymysql://{encoded_url(mysql_user)}:{encoded_url(mysql_password)}'
-                                    f'@localhost:3306/{encoded_url(mysql_database)}')
-        Base.metadata.create_all(self.engine)
-        self.Session = sessionmaker(bind=self.engine)
-        self.database = database()
+        self.df = None
+
         try:
+            self.engine = create_engine(f'mysql+pymysql://{encoded_url(mysql_user)}:{encoded_url(mysql_password)}'
+                                        f'@localhost:3306/{encoded_url(mysql_database)}')
+            Base.metadata.create_all(self.engine)
+            self.Session = sessionmaker(bind=self.engine)
+            self.database = database()
             with self.engine.connect() as conn:
                 result = conn.execute(text("select 1"))
                 print("MySQL connection successful")
         except Exception as e:
             print("Error:", str(e))
+            self.usingCSV = True
+            self.loadCSV()
+
+    def loadCSV(self):
+        if self.pathCSV:
+            self.df = pd.read_csv(self.pathCSV)
+            self.df[DATE_COL] = pd.to_datetime(self.df[DATE_COL], format='%Y-%m-%d')
+            self.df["id"] = self.df["id"].astype('str')
+
+    def getName(self):
+        return self.database if self.database else self.__class__.__name__
 
     def get_all_data(self):
+        if self.usingCSV:
+            return self.df
         query = f"select * from {self.database.getName()}"
         df = pd.read_sql(query, self.engine)
         return df
 
     def insert_df(self, df):
+        if self.usingCSV:
+            self.df = pd.merge(self.df, df, how='outer')
+            return self.df
         df.to_sql(self.database.getName(), con=self.engine, if_exists='append', index=False)
 
     def get_col_names(self):
+        if self.usingCSV:
+            return self.df.columns
         return self.database.__table__.columns.keys()
 
-    def get_data_by_id_and_datetime(self, id, datetime):
-        session = self.Session()
-        weather_data = session.query(self.database).filter(
-            and_(self.database.id == id, self.database.datetime == datetime)
-        ).first()
-        session.close()
-        return weather_data
-
     def get_date_between(self, start_datetime, end_datetime, id=None):
+        if self.usingCSV:
+            return self.df[
+                (self.df[DATE_COL] >= start_datetime) & (self.df[DATE_COL] <= end_datetime) & (self.df['id'] == id)]
+
         query = f"""
             SELECT * FROM {self.database.getName()}
             WHERE datetime >= '{start_datetime}' AND
@@ -106,6 +126,8 @@ class WeatherDatabase(Base):
 
 
 class WeatherDataTable(DataTable):
+    pathCSV = meteoVCPath
+
     def __init__(self):
         super().__init__(WeatherDatabase)
 
@@ -133,5 +155,6 @@ class EventAttendance(Base):
 
 
 class EventAttendanceDataTable(DataTable):
+    pathCSV = attendancePath
     def __init__(self):
         super().__init__(EventAttendance)

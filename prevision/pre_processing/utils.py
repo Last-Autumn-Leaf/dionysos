@@ -202,3 +202,6 @@ modei2Path = {MODE_DAILY_SALES: daily_sales_CLS,
               MODE_HOURLY_CLIENT: hourly_client_CLS}
 isModeValid = lambda x: x in ALL_MODES or x in modeStr2i
 castStr2Datetime = lambda x: datetime.strptime(x, '%Y-%m-%d')
+
+DATE_COL = 'datetime'
+DATE_FORMAT = '%Y-%m-%d'

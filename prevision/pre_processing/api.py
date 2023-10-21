@@ -5,17 +5,18 @@ import pandas as pd
 from prevision import timeThis
 from .DataTable import DataTable, WeatherDatabase, WeatherDataTable, EventAttendance, EventAttendanceDataTable
 from .utils import ACCESS_TOKEN_PREDICT_HQ, affluencePath, ATTENDANCE_BASE_CAT, ST_CATH_LOC, meteoPath, LA_SALLE, \
-    ACCESS_TOKEN_VISUAL_CROSSING, castStr2Datetime, meteoVCPath, WeatherDataTableName, attendancePath
+    ACCESS_TOKEN_VISUAL_CROSSING, castStr2Datetime, meteoVCPath, WeatherDataTableName, attendancePath, DATE_FORMAT, \
+    DATE_COL
 from datetime import datetime, timedelta
 import atexit
 
 
 class Api():
-    def __init__(self, endpoint, token, dt, csvPath):
+    def __init__(self, endpoint, token, dt):
         self.endpoint = endpoint
         self.token = token
         self.dt = dt()
-        self.csvPath = csvPath
+        self.csvPath = self.dt.pathCSV
         atexit.register(self.dump2CSV)
 
     def dump2CSV(self):
@@ -23,9 +24,9 @@ class Api():
             if self.dt and self.csvPath:
                 df = self.dt.get_all_data()
                 df.to_csv(self.csvPath, index=False)
-                print(f"saving {self.dt.database.getName()} at {self.csvPath}")
+                print(f"saving {self.dt.getName()} at {self.csvPath}")
         except Exception as e:
-            print(f"Saving {self.dt.database.getName()} at {self.csvPath} failed")
+            print(f"Saving {self.dt.getName()} at {self.csvPath} failed")
             print("\t", str(e))
 
 
@@ -279,9 +280,9 @@ class Api_VC(Api):
     endpoint = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
 
     def __init__(self):
-        super().__init__(self.endpoint, ACCESS_TOKEN_VISUAL_CROSSING, WeatherDataTable, meteoVCPath)
+        super().__init__(self.endpoint, ACCESS_TOKEN_VISUAL_CROSSING, WeatherDataTable)
         self.resolvedAddress = None
-        self.MAX_COST = 650
+        self.MAX_COST = 366
         self.unit = 'metric'
 
     @staticmethod
@@ -320,15 +321,16 @@ class Api_VC(Api):
         jsonData = response.json()
         df = pd.DataFrame(jsonData['days']).filter(dt.get_col_names())
         df['id'] = id
+        df['datetime'] = pd.to_datetime(df['datetime'], format=DATE_FORMAT)
         dt.insert_df(df)
 
     @timeThis("Received meteo data in:")
-    def getMeteoDate(self, location, start_date, end_date):
+    def getMeteoData(self, location, start_date, end_date):
         stationID = self.getIDFromLocation(location)
         dt = self.dt
         oldData = dt.get_date_between(start_date, end_date, stationID)
 
-        oldDatetime = set(oldData['datetime'].tolist())
+        oldDatetime = set([x.strftime("%Y-%m-%d") if type(x) != str else x for x in oldData['datetime']])
         allRanges = set(getDatesBetween(start_date, end_date))
         missingDates = getMissingDatesRanges(oldDatetime, allRanges)
 
@@ -363,8 +365,15 @@ class Api_PHQ(Api):
     endpoint = "https://api.predicthq.com/v1"
 
     def __init__(self):
-        super().__init__(self.endpoint, ACCESS_TOKEN_PREDICT_HQ, EventAttendanceDataTable, attendancePath)
+        super().__init__(self.endpoint, ACCESS_TOKEN_PREDICT_HQ, EventAttendanceDataTable)
         self.selected_cat = ATTENDANCE_BASE_CAT
+
+    def phqCapStartDate(self, start_date):
+        PHQ_cap = (pd.to_datetime('today') - pd.DateOffset(years=1) + pd.DateOffset(days=1)).strftime('%Y-%m-%d')
+        if start_date < PHQ_cap:
+            print(f'Setting start_date to {PHQ_cap}')
+            start_date = PHQ_cap
+        return start_date
 
     def getIDFromLocation(self, location, resolvedAddress):
         '''
@@ -509,19 +518,17 @@ class Api_PHQ(Api):
                 feature_list.append(dataframe_attendance_batch)
             # On concatène les données d'attendance
             dataframe_attendance = pd.concat(feature_list, ignore_index=True)
+        dataframe_attendance[DATE_COL] = pd.to_datetime(dataframe_attendance[DATE_COL], format=DATE_FORMAT)
         return dt.insert_df(dataframe_attendance)
 
     def getAttendanceData(self, location, start_date, end_date, resolvedAddress=None):
-        PHQ_cap = (pd.to_datetime('today') - pd.DateOffset(years=1) + pd.DateOffset(days=1)).strftime('%Y-%m-%d')
-        if start_date < PHQ_cap:
-            print(f'Setting start_date to {PHQ_cap}')
-            start_date = PHQ_cap
+        start_date = self.phqCapStartDate(start_date)
         id, geo = self.getIDFromLocation(location, resolvedAddress)
 
         dt = self.dt
         oldData = dt.get_date_between(start_date, end_date, id)
 
-        oldDatetime = set([x.strftime("%Y-%m-%d") for x in oldData['datetime']])
+        oldDatetime = set([x.strftime("%Y-%m-%d") if type(x) != str else x for x in oldData['datetime']])
         allRanges = set(getDatesBetween(start_date, end_date))
         missingDates = getMissingDatesRanges(oldDatetime, allRanges)
 
@@ -540,6 +547,7 @@ def checkResponse(response):
 
 
 def getDatesBetween(start_date, end_date):
+    # TODO : change this for pd.date range
     start_date = castStr2Datetime(start_date)
     end_date = castStr2Datetime(end_date)
     date_list = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
