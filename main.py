@@ -2,10 +2,12 @@ import pandas as pd
 
 from prevision import Options, Model, DataLoader, XGBOOST_TYPE, getAllDataFromCSV, RNN_TYPE, hourlySalesPath, \
     dailySalesPath, getPrevSells, Api_VC, modei2Path, getDataFromMode, DataTable, api_predicthq, Api_PHQ, \
-    generateSportBroadcast, mergeDfList, addDates, addSportBroadcast, DATE_COL, getDatesBetween, DATE_FORMAT
+    generateSportBroadcast, mergeDfList, addDates, addSportBroadcast, DATE_COL, getDatesBetween, DATE_FORMAT, \
+    COL_TO_IGNORE, MODE_HOURLY_SALES, get_type_csv_fromMD, modeStr2i
 import numpy as np
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 
 def createXY(sellsDF, meteoDF, attendanceDf, outputColNames):
@@ -16,12 +18,13 @@ def createXY(sellsDF, meteoDF, attendanceDf, outputColNames):
     df.sort_values(by=DATE_COL, ascending=True, inplace=True)
     datetimeCol = [x.strftime("%Y-%m-%d") for x in df[DATE_COL].tolist()]
     object_columns = df.select_dtypes(include=['object'])  # remove object col
-    X = df.drop(outputColNames, axis=1).drop(object_columns, axis=1)
+    print("ignoring columns", object_columns.columns)
+    X = df.drop(outputColNames, axis=1).drop(object_columns, axis=1).drop(COL_TO_IGNORE, axis=1)
     Y = df[outputColNames]
     return X, Y, datetimeCol
 
 
-def main(mode, dataPath, localisation):
+def getOutput(mode, dataPath, localisation):
     vc = Api_VC()
     predicthq = Api_PHQ()
 
@@ -79,21 +82,36 @@ def main(mode, dataPath, localisation):
     dataLoaderDeploy = DataLoader(options=options, customData=deployData)
 
     res = modelInstance.deploy(dataLoaderDeploy)
-    plt.plot(res['predicted_sequence'])
+    if not hourly:
+        plt.plot(res['predicted_sequence'])
+
+    outputDate = getDatesBetween(min_date, max_date)
     plt.xticks([x for x in range(daysToPredict)], getDatesBetween(min_date, max_date), rotation=90)
     plt.title('Predicted sequence')
     plt.show()
+    if not hourly:
+        output = pd.DataFrame({'Date': outputDate, 'vente': res['predicted_sequence'].tolist()}).round(2)
+    else:
+        hourlyOutput = res['predicted_sequence'].t().tolist()
+        output = pd.DataFrame(
+            {**{'Date': outputDate}, **{heure: hourlyOutput[i] for i, heure in enumerate(outputColNames)}}).round(0)
+    output.to_csv(dataPath.parent / Path("output_" + dataPath.name), index=False)
     modelInstance.featureImportance(dataLoaderDeploy.getFeatureNames())
 
     return X, Y, outputColNames
 
 
-if __name__ == '__main__':
-    mode = 1
+def main(localisation, dataPath, outputSuffix):
+    MD_file_type, df, output_path = get_type_csv_fromMD(dataPath, outputSuffix)
+    mode = modeStr2i[MD_file_type]
+    getOutput(mode, dataPath=output_path, localisation=localisation)
 
+if __name__ == '__main__':
     localisation = "7077 Bd Newman, LaSalle, QC H8N 1N1"
-    dataPath = modei2Path[mode]
-    main(mode, dataPath, localisation)
+    dataPath = "/Users/carlos/PycharmProjects/dionysos/prevision/data/data/vente_CLS/client_heure/"
+    dataPath = "/Users/carlos/PycharmProjects/dionysos/prevision/data/data/vente_CLS/all-sells.csv"
+    outputSuffix = "CLS"
+    main(localisation, dataPath, outputSuffix)
 
     # recursif = True
     # options = Options(model_type=XGBOOST_TYPE, input_sequence_length=14,

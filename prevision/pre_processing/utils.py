@@ -36,6 +36,7 @@ hours_sales_CLS = dataDir / "hours_sales_CLS.csv"
 meteoVCPath = dataDir / "meteo_VC.csv"
 attendancePath = dataDir / "attendance_PHQ.csv"
 
+
 # Variables à utiliser pour l'Api de prévision d'attendance PredictHQ
 ATTENDANCE_BASE_CAT = [
     "phq_attendance_concerts",
@@ -194,8 +195,8 @@ MODE_DAILY_SALES = 0
 MODE_HOURLY_SALES = 1
 MODE_HOURLY_CLIENT = 2
 ALL_MODES = [MODE_DAILY_SALES, MODE_HOURLY_SALES, MODE_HOURLY_CLIENT]
-modeStr2i = {'daily_sales': MODE_DAILY_SALES, 'hourly_sales': MODE_HOURLY_SALES, 'hourly_client': MODE_HOURLY_CLIENT}
-modei2str = {MODE_DAILY_SALES: 'daily_sales', MODE_HOURLY_SALES: 'hourly_sales', MODE_HOURLY_CLIENT: 'hourly_client'}
+modeStr2i = {'daily_sales': MODE_DAILY_SALES, 'hourly_sales': MODE_HOURLY_SALES, 'client': MODE_HOURLY_CLIENT}
+modei2str = {MODE_DAILY_SALES: 'daily_sales', MODE_HOURLY_SALES: 'hourly_sales', MODE_HOURLY_CLIENT: 'client'}
 
 modei2Path = {MODE_DAILY_SALES: daily_sales_CLS,
               MODE_HOURLY_SALES: hours_sales_CLS,
@@ -205,3 +206,4 @@ castStr2Datetime = lambda x: datetime.strptime(x, '%Y-%m-%d')
 
 DATE_COL = 'datetime'
 DATE_FORMAT = '%Y-%m-%d'
+COL_TO_IGNORE = [DATE_COL, 'humidity']

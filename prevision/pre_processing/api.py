@@ -559,6 +559,8 @@ def getMissingDatesRanges(oldDatetime, allRanges):
     if not difference_set:
         return;
     difference_set = sorted(list(difference_set))  # should already be sorted but just in case
+    if len(difference_set) == 1:
+        return [(difference_set[0], difference_set[0])]
     missingDates = []
     lastIndex = 0
     for i in range(1, len(difference_set)):

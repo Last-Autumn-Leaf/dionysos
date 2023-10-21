@@ -106,7 +106,7 @@ def getDataFromMode(mode, dataPath):
     if mode == MODE_DAILY_SALES:
         col_names = ['vente']
         prevSellsDf = pd.read_csv(dataPath, parse_dates=['Date']).rename(columns={'Date': DATE_COL})
-    elif mode == MODE_HOURLY_SALES:
+    elif mode == MODE_HOURLY_SALES or mode == MODE_HOURLY_CLIENT:
         df_sales = pd.read_csv(dataPath).drop(['sources', 'periode', 'day'], axis=1)
         df_sales['date_time'] = pd.to_datetime(df_sales['date_time']).dt.date
 
@@ -125,8 +125,7 @@ def getDataFromMode(mode, dataPath):
         prevSellsDf = pd.DataFrame(newX[:, start_i:], columns=col_names)
         prevSellsDf[DATE_COL] = dt
         prevSellsDf[DATE_COL] = prevSellsDf[DATE_COL].astype('datetime64[ns]')
-    elif mode == MODE_HOURLY_CLIENT:
-        raise ValueError(f"mode {mode} not implemented yet")
+
     else:
         raise ValueError(f"mode {mode} not recognized !")
 

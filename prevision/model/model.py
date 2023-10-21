@@ -33,7 +33,7 @@ class Model():
         self.showCurrentOptions(self.options.getDataOptions())
         self.setModel()
 
-    def deploy(self, dataLoader):
+    def deploy(self, dataLoader, plot=True):
         if self.options.model_type == XGBOOST_TYPE:
 
             n = len(dataLoader.full_dataset)
@@ -53,7 +53,9 @@ class Model():
             prediction = torch.cat(prediction, dim=0)
 
         else:
-            print("Not implemented yet")
+            raise "Not implemented yet"
+
+        # show_test(y_test, prediction, None)
 
         return {
             'model': model,
@@ -299,14 +301,16 @@ class Model():
         saveModel(self)
 
     @timeThis("RayTuned in : ")
-    def fineTuneXGBoostRay(self, dataLoader, param_distributions=None, n_iter=10, scoring='rmse', eval_metric="rmse"):
+    def fineTuneXGBoostRay(self, dataLoader, param_distributions=None, n_iter=10, scoring='rmse', eval_metric="rmse",
+                           plot=True):
         assert self.options.model_type == XGBOOST_TYPE, f"Can't use fineTuneXGBoostRay with model type={self.options.model_type}"
         X_train, Y_train, X_test, Y_test = self.preprocessDataXGBoost(dataLoader)
         eval_results, res = self.model.rayTune(X_train, Y_train, X_test, Y_test, param_distributions, n_iter, scoring,
                                                eval_metric)
-        plot_eval_result_XGBOOST(eval_results)
-        # unflatenX_test = self.unflattenXGData(X_test)
-        show_test(Y_test, res, None)
+        if plot:
+            plot_eval_result_XGBOOST(eval_results)
+            # unflatenX_test = self.unflattenXGData(X_test)
+            show_test(Y_test, res, None)
 
         # TODO : handle the saving of the models
         saveModel(self)
